@@ -1,0 +1,17 @@
+.DS_Store
+.gradle/
+**/build/
+**/DerivedData/
+**/*.xcodeproj/
+local.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.ipa
+*.apk
+__pycache__/
+/dist/
+/source.json
+/icon.png
+/website/release-feed.json

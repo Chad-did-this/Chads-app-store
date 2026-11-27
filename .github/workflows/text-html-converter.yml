@@ -1,0 +1,81 @@
+name: TXT and HTML Converter APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'App Store/Android/text-html-converter/**'
+      - '.github/workflows/text-html-converter.yml'
+      - 'distribution/sign_android_apk.py'
+  pull_request:
+    paths:
+      - 'App Store/Android/text-html-converter/**'
+      - '.github/workflows/text-html-converter.yml'
+      - 'distribution/sign_android_apk.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: text-html-converter-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Test conversions, check Android code and build release
+        run: gradle -p "App Store/Android/text-html-converter" :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+      - name: Upload checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: text-html-converter-checks
+          path: |
+            App Store/Android/text-html-converter/app/build/reports/tests/testReleaseUnitTest/
+            App Store/Android/text-html-converter/app/build/reports/lint-results-release.*
+          if-no-files-found: ignore
+      - name: Sign APK with the permanent developer key
+        if: github.event_name != 'pull_request'
+        env:
+          ANDROID_SIGNING_JSON: ${{ secrets.ANDROID_SIGNING_JSON }}
+        run: python3 distribution/sign_android_apk.py "App Store/Android/text-html-converter/app/build/outputs/apk/release/app-release-unsigned.apk" dist/text-html-converter.apk
+      - name: Verify release package and checksum
+        if: github.event_name != 'pull_request'
+        run: |
+          apkanalyzer manifest print dist/text-html-converter.apk > "$RUNNER_TEMP/text-html-converter-manifest.xml"
+          python3 "App Store/Android/text-html-converter/tools/check_release_apk.py" "$RUNNER_TEMP/text-html-converter-manifest.xml" "$GITHUB_RUN_NUMBER"
+          (cd dist && sha256sum text-html-converter.apk > text-html-converter.apk.sha256)
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: text-html-converter
+          path: dist/text-html-converter.apk
+      - name: Publish converter in the store
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="1.0.$GITHUB_RUN_NUMBER"
+          tag="text-html-converter-v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists; preserving original."
+          else
+            gh release create "$tag" dist/text-html-converter.apk dist/text-html-converter.apk.sha256 --target "$GITHUB_SHA" --title "TXT & HTML Converter $version" --notes "Offline TXT to HTML and HTML to TXT conversion. Open one or multiple files, edit text, save selected files or convert a batch into a chosen folder. Default conversion preserves source code, encoding and line endings. Optional readable HTML pages for plain text. Signed with the permanent developer key."
+          fi

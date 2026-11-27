@@ -1,0 +1,59 @@
+name: Deploy website
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'docs/catalog.json'
+      - '.github/workflows/pages.yml'
+      - 'distribution/release_feed.py'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Android APK', 'iPhone IPA', 'Android Command Center PRO APK', 'TXT and HTML Converter APK']
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: main
+      - name: Validate storefront
+        run: |
+          python3 -m json.tool docs/catalog.json >/dev/null
+          node --check website/store.js
+          test -f website/index.html
+          test -f website/style.css
+      - name: Generate public release feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 distribution/release_feed.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy storefront
+        id: deployment
+        uses: actions/deploy-pages@v4

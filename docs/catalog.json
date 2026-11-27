@@ -1,0 +1,42 @@
+[
+  {
+    "id": "android-store",
+    "platform": "android",
+    "name": "Chad's App Store",
+    "description": "Native app catalog with verified APK downloads, installation and update checks.",
+    "category": "App Management",
+    "releasePrefix": "android-store-v",
+    "asset": "chads-store.apk",
+    "packageId": "com.chaddidthis.universalstore"
+  },
+  {
+    "id": "ios-store",
+    "platform": "ios",
+    "name": "Chad's App Store",
+    "description": "Native iPhone app catalog with platform sections, search, release checks and sideloading guidance.",
+    "category": "App Management",
+    "releasePrefix": "ios-store-v",
+    "asset": "chads-store.ipa",
+    "packageId": "com.chaddidthis.universalstore.ios"
+  },
+  {
+    "id": "command-center-pro",
+    "platform": "android",
+    "name": "Android Command Center PRO",
+    "description": "Unified hardware scanner, live monitoring, local ADB terminal, Self Debugger diagnostics and 12 architecture scans. One shared ADB identity. Android 11+.",
+    "category": "Hardware",
+    "releasePrefix": "command-center-pro-v",
+    "asset": "command-center-pro.apk",
+    "packageId": "com.chaddidthis.commandpro"
+  },
+  {
+    "id": "text-html-converter",
+    "platform": "android",
+    "name": "TXT & HTML Converter",
+    "description": "Offline TXT to HTML and HTML to TXT conversion. Open one or multiple files, edit or paste text, and save new copies. Batch folder export and optional readable HTML pages. Preserves source code by default.",
+    "category": "File Tools",
+    "releasePrefix": "text-html-converter-v",
+    "asset": "text-html-converter.apk",
+    "packageId": "com.chaddidthis.texthtml"
+  }
+]

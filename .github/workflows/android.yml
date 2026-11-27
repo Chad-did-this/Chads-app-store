@@ -1,0 +1,76 @@
+name: Android APK
+on:
+  push:
+    branches: [main]
+    paths: ['App Store/Android/Store/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-store-publishing
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - run: gradle -p "App Store/Android/Store" :app:assembleDebug
+      - name: Prepare signed APK
+        env:
+          ANDROID_SIGNING_JSON: ${{ secrets.ANDROID_SIGNING_JSON }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ -z "$ANDROID_SIGNING_JSON" ]; then
+            echo "::error::Permanent signing secret ANDROID_SIGNING_JSON is required. No temporary APK will be published."
+            exit 1
+          fi
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/store.p12" "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/store.keypass" "$RUNNER_TEMP/store.alias"' EXIT
+            python3 - <<'PY'
+          import json, os, base64, pathlib
+          try:
+              key = json.loads(os.environ["ANDROID_SIGNING_JSON"])
+              assert all(isinstance(key[k], str) and key[k] for k in ("keystore_b64", "password", "alias"))
+              assert "\\n" not in key["password"] and "\\r" not in key["password"] and "\\n" not in key["alias"] and "\\r" not in key["alias"]
+              data = base64.b64decode(key["keystore_b64"], validate=True)
+              assert data
+          except Exception:
+              raise SystemExit("Invalid signing secret format; expected keystore_b64, password and alias.") from None
+          directory = pathlib.Path(os.environ["RUNNER_TEMP"])
+          (directory / "store.p12").write_bytes(data)
+          (directory / "store.pass").write_text(key["password"] + "\n")
+          (directory / "store.keypass").write_text(key["password"] + "\n")
+          (directory / "store.alias").write_text(key["alias"])
+          PY
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/store.p12" --ks-type PKCS12 --ks-key-alias "$(cat "$RUNNER_TEMP/store.alias")" --ks-pass "file:$RUNNER_TEMP/store.pass" --key-pass "file:$RUNNER_TEMP/store.keypass" --out dist/chads-store.apk "App Store/Android/Store/app/build/outputs/apk/debug/app-debug.apk"
+            echo "BUILD_NOTE=Developer-key signed APK" >> "$GITHUB_ENV"
+            rm -f "$RUNNER_TEMP/store.p12" "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/store.keypass" "$RUNNER_TEMP/store.alias"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs dist/chads-store.apk
+          (cd dist && sha256sum chads-store.apk > chads-store.apk.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-store
+          path: dist/chads-store.apk
+      - name: Publish versioned APK
+        if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[layout only]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="android-store-v1.0.$GITHUB_RUN_NUMBER"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists; preserving original."
+          else
+            gh release create "$tag" dist/chads-store.apk dist/chads-store.apk.sha256 --target "$GITHUB_SHA" --title "Android Store 1.0.$GITHUB_RUN_NUMBER" --notes "$BUILD_NOTE"
+          fi

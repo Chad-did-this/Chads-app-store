@@ -1,0 +1,97 @@
+name: Android Command Center PRO APK
+on:
+  push:
+    branches: [main]
+    paths: ['App Store/Android/command-center-pro/**', '.github/workflows/command-center-pro.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: command-center-pro-publishing
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Check Android code and build APK
+        run: gradle -p "App Store/Android/command-center-pro" :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+      - name: Upload Android lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: command-center-pro-lint
+          path: |
+            App Store/Android/command-center-pro/app/build/reports/lint-results-release.*
+            App Store/Android/command-center-pro/app/build/outputs/logs/manifest-merger-release-report.txt
+          if-no-files-found: ignore
+      - name: Verify and prepare APK
+        env:
+          ANDROID_SIGNING_JSON: ${{ secrets.ANDROID_SIGNING_JSON }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          source_apk="App Store/Android/command-center-pro/app/build/outputs/apk/release/app-release-unsigned.apk"
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          if [ -z "$ANDROID_SIGNING_JSON" ]; then
+            echo "::error::Permanent signing secret ANDROID_SIGNING_JSON is required. No temporary APK will be published."
+            exit 1
+          fi
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/command-center-pro.p12" "$RUNNER_TEMP/command-center-pro.pass" "$RUNNER_TEMP/command-center-pro.keypass" "$RUNNER_TEMP/command-center-pro.alias"' EXIT
+            python3 - <<'PY'
+          import json, os, base64, pathlib
+          try:
+              key = json.loads(os.environ["ANDROID_SIGNING_JSON"])
+              assert all(isinstance(key[k], str) and key[k] for k in ("keystore_b64", "password", "alias"))
+              assert "\\n" not in key["password"] and "\\r" not in key["password"] and "\\n" not in key["alias"] and "\\r" not in key["alias"]
+              data = base64.b64decode(key["keystore_b64"], validate=True)
+              assert data
+          except Exception:
+              raise SystemExit("Invalid signing secret format; expected keystore_b64, password and alias.") from None
+          directory = pathlib.Path(os.environ["RUNNER_TEMP"])
+          (directory / "command-center-pro.p12").write_bytes(data)
+          (directory / "command-center-pro.pass").write_text(key["password"] + "\n")
+          (directory / "command-center-pro.keypass").write_text(key["password"] + "\n")
+          (directory / "command-center-pro.alias").write_text(key["alias"])
+          PY
+            "$signer" sign --ks "$RUNNER_TEMP/command-center-pro.p12" --ks-type PKCS12 --ks-key-alias "$(cat "$RUNNER_TEMP/command-center-pro.alias")" --ks-pass "file:$RUNNER_TEMP/command-center-pro.pass" --key-pass "file:$RUNNER_TEMP/command-center-pro.keypass" --out dist/command-center-pro.apk "$source_apk"
+            rm -f "$RUNNER_TEMP/command-center-pro.p12" "$RUNNER_TEMP/command-center-pro.pass" "$RUNNER_TEMP/command-center-pro.keypass" "$RUNNER_TEMP/command-center-pro.alias"
+            echo "BUILD_NOTE=Developer-key signed APK. Existing installations require the same signing key." >> "$GITHUB_ENV"
+          "$signer" verify --print-certs dist/command-center-pro.apk | tee "$RUNNER_TEMP/command-center-pro-signing.txt"
+          (cd dist && sha256sum command-center-pro.apk > command-center-pro.apk.sha256)
+      - name: Check the signed release package
+        run: |
+          apkanalyzer manifest print dist/command-center-pro.apk > "$RUNNER_TEMP/command-center-pro-manifest.xml"
+          python3 "App Store/Android/command-center-pro/tools/check_release_apk.py" "$RUNNER_TEMP/command-center-pro-manifest.xml" "$RUNNER_TEMP/command-center-pro-signing.txt" "$GITHUB_RUN_NUMBER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: command-center-pro
+          path: dist/command-center-pro.apk
+      - name: Publish command center release
+        if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[layout only]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="1.0.$((1000 + GITHUB_RUN_NUMBER))"
+          tag="command-center-pro-v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists; preserving original."
+          else
+            gh release create "$tag" dist/command-center-pro.apk dist/command-center-pro.apk.sha256 --target "$GITHUB_SHA" --title "Android Command Center PRO $version" --notes "$BUILD_NOTE"
+          fi
