@@ -32,8 +32,15 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check piano game behavior
+        run: node --test "App Store/Android/piano-game/tools/game.test.cjs"
       - name: Build Piano Game
-        run: gradle -p "App Store/Android/piano-game" :app:assembleRelease
+        run: gradle -p "App Store/Android/piano-game" :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+      - name: Check packaged game assets
+        run: python3 "App Store/Android/piano-game/tools/check_release_apk.py" "App Store/Android/piano-game/app/build/outputs/apk/release/app-release-unsigned.apk"
       - name: Sign with permanent developer key
         env:
           ANDROID_SIGNING_JSON: ${{ secrets.ANDROID_SIGNING_JSON }}
@@ -53,3 +60,4 @@ jobs:
           else
             gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Endless piano sight-reading practice. Offline microphone input, timing, speed controls and hand selection."
           fi
+
