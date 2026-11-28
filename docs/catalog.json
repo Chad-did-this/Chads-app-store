@@ -43,7 +43,7 @@
     "id": "piano-game",
     "platform": "android",
     "name": "Piano Game",
-    "description": "Piano note practice with adjustable microphone sensitivity for quiet notes, written music on piano keys, separate hand flashcards, a note guide and adjustable tempo. Works offline. Middle C defaults to C3 naming; C4 naming is available.",
+    "description": "Piano practice with selectable right, left or both-hand rows, adjustable microphone sensitivity, written music on piano keys, hand flashcards, a note guide and adjustable tempo. Works offline. C3/C4 middle-C naming is available.",
     "category": "Music",
     "releasePrefix": "piano-game-v",
     "asset": "piano-game.apk",

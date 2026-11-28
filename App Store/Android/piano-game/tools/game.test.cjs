@@ -19,7 +19,7 @@ function loadGame(bridge) {
         return elements.get(id);
     }
     for (const [id, value] of Object.entries({
-        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3', micSensitivity: 'high', micSensitivityQuick: 'high'
+        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3', micSensitivity: 'high', micSensitivityQuick: 'high', gameHands: 'treble'
     })) element(id).value = value;
     element('hintToggle').checked = true;
     function node() {
@@ -625,5 +625,79 @@ test('raising sensitivity while holding a note does not create another key press
     app.run('analyze(440)');
     assert.equal(app.run('correct'), 1);
     assert.equal(app.run('wrong'), 0);
+    app.run('closeMic()');
+});
+
+test('both hands shows a right-hand row above a separate left-hand row', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    app.element('gameHands').value = 'both';
+    app.element('gameHands').onchange();
+    assert.equal(app.run('hand'), 'both');
+    assert.equal(app.element('leftPaper').hidden, false);
+    assert.equal(app.element('handLabel').textContent, 'Right hand · Treble clef');
+    assert.equal(app.element('leftHandLabel').textContent, 'Left hand · Bass clef');
+    assert.match(app.element('staff').innerHTML, /id="notesClip-staff"/);
+    assert.match(app.element('leftStaff').innerHTML, /id="notesClip-leftStaff"/);
+    assert.equal(app.run("queue.every((note,index)=>note.clef===(index%2===0?'treble':'bass'))"), true);
+    assert.ok(app.run("queue.some(note=>note.clef==='treble') && queue.some(note=>note.clef==='bass')"));
+});
+
+test('each practice row renders only its own hand and aligns the hit lines', () => {
+    const app = loadGame();
+    app.run("setPracticeHand('both');queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null},{m:48,clef:'bass',spell:spelling(48),at:2,result:null}];beat=0;draw();");
+    const right = app.element('staff').innerHTML;
+    const left = app.element('leftStaff').innerHTML;
+    assert.match(right, />C3<\/text>/);
+    assert.doesNotMatch(right, />C2<\/text>/);
+    assert.match(left, />C2<\/text>/);
+    assert.doesNotMatch(left, />C3<\/text>/);
+    const lineX = svg => Number(svg.match(/<line x1="([0-9.]+)" x2="[0-9.]+" y1="5"/)[1]);
+    assert.equal(lineX(right), lineX(left));
+    assert.equal(app.element('staff').viewBox, app.element('leftStaff').viewBox);
+});
+
+test('switching between right, left and both keeps the score and updates settings', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    app.run('correct=8;wrong=2;');
+    app.run("setPracticeHand('both')");
+    assert.equal(app.element('leftPaper').hidden, false);
+    app.run("setPracticeHand('bass')");
+    assert.equal(app.element('leftPaper').hidden, true);
+    assert.equal(app.element('handLabel').textContent, 'Left hand · Bass clef');
+    assert.equal(app.element('gameHands').value, 'bass');
+    assert.equal(app.run("queue.every(note=>note.clef==='bass')"), true);
+    assert.equal(app.document.querySelectorAll('[data-clef]').find(button=>button.dataset.clef==='bass')['aria-pressed'], 'true');
+    app.run("setPracticeHand('treble')");
+    assert.equal(app.element('leftPaper').hidden, true);
+    assert.equal(app.element('handLabel').textContent, 'Right hand · Treble clef');
+    assert.equal(app.run('correct'), 8);
+    assert.equal(app.run('wrong'), 2);
+});
+
+test('both hand rows score their microphone notes in order without restarting audio', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    const stops = bridge.stops;
+    app.run("setPracticeHand('both')");
+    app.element('mode').value = 'wait';
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null},{m:48,clef:'bass',spell:spelling(48),at:2,result:null}];beat=1;lastTime=100;");
+    bridge.packet = quietPianoPacket(1, 0.001, 60);
+    app.run('analyze(200)');
+    bridge.packet = quietPianoPacket(2, 0.001, 60);
+    app.run('analyze(240)');
+    assert.equal(app.run('correct'), 1);
+    assert.match(app.element('hintText').textContent, /Left: C2/);
+    app.run('beat=2;');
+    bridge.packet = quietPianoPacket(3, 0.001, 48);
+    app.run('analyze(1100)');
+    bridge.packet = quietPianoPacket(4, 0.001, 48);
+    app.run('analyze(1140)');
+    assert.equal(app.run('correct'), 2);
+    assert.equal(app.run('wrong + missed'), 0);
+    assert.equal(bridge.stops, stops);
+    assert.equal(app.run('mic'), true);
     app.run('closeMic()');
 });

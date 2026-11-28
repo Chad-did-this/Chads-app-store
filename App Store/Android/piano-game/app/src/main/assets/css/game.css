@@ -758,3 +758,26 @@ input[type=range] {
     min-height:44px;
     border-radius:9px;
 }
+
+.play-hand-control {
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:9px;
+    min-height:44px;
+    font-size:14px;
+    color:var(--muted);
+}
+
+.play-hand-control select {
+    min-height:44px;
+    padding:8px 12px;
+    font-size:14px;
+}
+
+.practice-rows {
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    gap:12px;
+    width:100%;
+}

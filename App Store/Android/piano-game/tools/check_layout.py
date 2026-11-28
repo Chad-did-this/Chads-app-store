@@ -65,9 +65,10 @@ const messages = [
     ['Missed note','Microphone listening · play your piano'],
     ['Get ready…','Listening · quiet input']
 ];
-const anchors = ['gameScreen','paper','gameFooter','feedback','hintSlot','micIndicator','status','micSensitivityQuick'];
+const anchors = ['gameScreen','practiceRows','gameHands','paper','gameFooter','feedback','hintSlot','micIndicator','status','micSensitivityQuick'];
 function snapshot(doc) {
-    return Object.fromEntries(anchors.map(id => {
+    const visibleAnchors = doc.getElementById('leftPaper').hidden ? anchors : [...anchors,'leftPaper'];
+    return Object.fromEntries(visibleAnchors.map(id => {
         const rect = doc.getElementById(id).getBoundingClientRect();
         return [id, [rect.x, rect.y, rect.width, rect.height]];
     }));
@@ -86,6 +87,22 @@ function snapshot(doc) {
             doc.getElementById('demo').click();
             doc.getElementById('micIndicator').hidden = false;
             doc.getElementById('keyDetails').hidden = true;
+            for (const practiceHand of ['treble','bass','both']) {
+            const handControl = doc.getElementById('gameHands');
+            handControl.value = practiceHand;
+            handControl.dispatchEvent(new frame.contentWindow.Event('change',{bubbles:true}));
+            const left = doc.getElementById('leftPaper');
+            if (left.hidden !== (practiceHand !== 'both')) throw new Error('Incorrect hand row visibility');
+            if (practiceHand === 'both') {
+                const rightRect = doc.getElementById('paper').getBoundingClientRect();
+                const leftRect = left.getBoundingClientRect();
+                if (leftRect.top < rightRect.bottom || Math.abs(leftRect.width-rightRect.width)>0.5) {
+                    throw new Error('Hand rows are not stacked with matching widths');
+                }
+                const rightHit = doc.querySelector('#staff line[stroke-dasharray]').getBoundingClientRect();
+                const leftHit = doc.querySelector('#leftStaff line[stroke-dasharray]').getBoundingClientRect();
+                if (Math.abs(rightHit.x-leftHit.x)>0.5) throw new Error('Hand hit lines are misaligned');
+            }
             doc.scrollingElement.scrollTop = Math.min(40, doc.scrollingElement.scrollHeight - height);
             const initial = snapshot(doc);
             const scrollTop = doc.scrollingElement.scrollTop;
@@ -102,7 +119,7 @@ function snapshot(doc) {
                         doc.getElementById(id).textContent = pass === 2 ? '9999' : '0';
                     }
                     const current = snapshot(doc);
-                    for (const id of anchors) {
+                    for (const id of Object.keys(initial)) {
                         current[id].forEach((value,index) => {
                             if (Math.abs(value - initial[id][index]) > 0.5) {
                                 throw new Error(`${width}x${height}: ${id} moved or resized after ${JSON.stringify(status)}: ${initial[id]} -> ${current[id]}`);
@@ -115,10 +132,11 @@ function snapshot(doc) {
                     checks++;
                 }
             }
+            }
             frame.remove();
         }
         result.dataset.state = 'passed';
-        result.textContent = JSON.stringify({checks,viewports:sizes.length,layout:'stable'});
+        result.textContent = JSON.stringify({checks,viewports:sizes.length,handModes:3,layout:'stable'});
     } catch (error) {
         result.dataset.state = 'failed';
         result.textContent = error.stack;

@@ -21,7 +21,7 @@ let hand='treble', queue=[], nextBeat=0, beat=0, lastTime=null, game=false, paus
 const nativeMicrophone = new NativeMicrophone();
 let mic=false,starting=false,token=0;
 let candidate=null,candidateCount=0,sounding=null,lastEvent=0,priorRms=0,quietFrames=0,pendingAttack=0,lastAnalysis=0;
-let lastNote=null, hinting=false;
+let lastNote=null, hinting=false, nextHand='treble';
 const bpm=()=>Number($('bpm').value), step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
 const windowBeats=()=>Math.min(step()*.44,bpm()/60*.35);
 const inputDelayBeats=()=>mic&&!waitMode()?bpm()/60000*75:0;
@@ -29,7 +29,8 @@ const minimumMicRms=()=>microphoneThreshold($('micSensitivity').value||'high');
 const lookahead=()=>Math.max(3.8,Math.min(7,($('paper').clientWidth-125)/55));
 const active=()=>queue.find(n=>n.result===null);
 function makeNote(at){
- const clef=hand==='both'?(Math.random()<.5?'treble':'bass'):hand;
+ const clef=hand==='both'?nextHand:hand;
+ if(hand==='both')nextHand=nextHand==='treble'?'bass':'treble';
  const pool=poolFor(clef,$('range').value,$('acc').value).filter(m=>m!==lastNote);
  const m=pool[Math.floor(Math.random()*pool.length)];lastNote=m;
  return {m,clef,spell:spelling(m,Math.random()<.5),at,result:null};
@@ -49,13 +50,14 @@ function stats(){for(const [id,v] of Object.entries({correct,wrong,missed,streak
 function updateHint() {
  const n=active();
  $('hintText').hidden=!hinting;
- setTextIfChanged('hintText',hinting&&n?'Next note: '+n.spell.label:'');
+ const label=hinting&&n?(hand==='both'?(n.clef==='treble'?'Right: ':'Left: '):'Next note: ')+n.spell.label:'';
+ setTextIfChanged('hintText',label);
  setTextIfChanged('gameNoteNames',hinting?'Names: On':'Show names');
  $('gameNoteNames').setAttribute('aria-pressed',String(hinting));
 }
 function restart(clearScore=true){
  if(clearScore){correct=wrong=missed=streak=0;stats();}
- beat=0;lastTime=null;lastNote=null;queue=[];nextBeat=step()*3;hinting=$('hintToggle').checked;fill();draw();updateHint();feedback(game?'Get ready…':'Ready to play');renderKeys();
+ beat=0;lastTime=null;lastNote=null;nextHand='treble';queue=[];nextBeat=step()*3;hinting=$('hintToggle').checked;fill();draw();updateHint();feedback(game?'Get ready…':'Ready to play');renderKeys();
 }
 function advanceTo(time){
  if(!game||paused){lastTime=null;return;}
@@ -78,26 +80,22 @@ function play(m,time=performance.now(),source='test'){
  else {wrong++;streak=0;if(!waitMode())n.result='wrong';feedback('Wrong · '+nameOf(m),'bad');}
  stats();updateHint();draw();
 }
-function draw(){
- const svg=$('staff'),w=Math.max(300,$('paper').clientWidth||340), mixed=hand==='both';
+function drawPracticeRow(clef, svgId, paperId, labelId, instructionId) {
+ const svg=$(svgId),w=Math.max(300,$(paperId).clientWidth||340);
  const left=8, hit=Math.min(115,Math.max(81,w*.23)), right=w-12, gap=14, scale=.056;
- const clefs=mixed?['treble','bass']:[hand];
- const layout={};let h=0;
- for(const c of clefs){
-  const bottom=spelling(c==='treble'?64:43).step;
-  const positions=poolFor(c,$('range').value,$('acc').value).flatMap(m=>[spelling(m).step-bottom,spelling(m,true).step-bottom]);
-  const base=h+111+Math.max(0,Math.max(...positions)-12)*gap/2;
-  const label=Math.max(base+65,base-Math.min(0,...positions)*gap/2+28);
-  layout[c]={base,label};h=label+16;
- }
- const baseOf=c=>layout[c].base;
+ const bottom=spelling(clef==='treble'?64:43).step;
+ const positions=poolFor(clef,$('range').value,$('acc').value).flatMap(m=>[spelling(m).step-bottom,spelling(m,true).step-bottom]);
+ const base=111+Math.max(0,Math.max(...positions)-12)*gap/2;
+ const labelY=Math.max(base+65,base-Math.min(0,...positions)*gap/2+28);
+ const h=labelY+16;
+ const clipId='notesClip-'+svgId;
  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
- let s=`<defs><clipPath id="notesClip"><rect x="${hit-32}" y="0" width="${w-hit+32}" height="${h}"/></clipPath></defs>`;
- for(const c of clefs){const b=baseOf(c);for(let i=0;i<5;i++)s+=`<line x1="${left}" x2="${right}" y1="${b-i*gap}" y2="${b-i*gap}" stroke="#333a42" stroke-width="1.25"/>`;s+=`<path d="${CLEFS[c]}" transform="translate(17 ${c==='treble'?b:b-6}) scale(${scale} ${-scale})" fill="#1d242b"/>`;}
- s+=`<rect x="${hit-12}" y="5" width="24" height="${h-10}" rx="6" fill="#23a66a" opacity=".11"/><line x1="${hit}" x2="${hit}" y1="5" y2="${h-5}" stroke="#168654" stroke-width="2.5" stroke-dasharray="5 4"/><path d="M${hit-5} 3h10l-5 7z" fill="#168654"/><g clip-path="url(#notesClip)">`;
+ let s=`<defs><clipPath id="${clipId}"><rect x="${hit-32}" y="0" width="${w-hit+32}" height="${h}"/></clipPath></defs>`;
+ {const c=clef,b=base;for(let i=0;i<5;i++)s+=`<line x1="${left}" x2="${right}" y1="${b-i*gap}" y2="${b-i*gap}" stroke="#333a42" stroke-width="1.25"/>`;s+=`<path d="${CLEFS[c]}" transform="translate(17 ${c==='treble'?b:b-6}) scale(${scale} ${-scale})" fill="#1d242b"/>`;}
+ s+=`<rect x="${hit-12}" y="5" width="24" height="${h-10}" rx="6" fill="#23a66a" opacity=".11"/><line x1="${hit}" x2="${hit}" y1="5" y2="${h-5}" stroke="#168654" stroke-width="2.5" stroke-dasharray="5 4"/><path d="M${hit-5} 3h10l-5 7z" fill="#168654"/><g clip-path="url(#${clipId})">`;
  const space=(right-hit)/lookahead();
- for(const n of queue){const x=hit+(n.at-beat)/step()*space;if(x<hit-38||x>right+25)continue;
- const b=baseOf(n.clef),bottom=spelling(n.clef==='treble'?64:43).step,p=n.spell.step-bottom,y=b-p*gap/2;
+ for(const n of queue){if(n.clef!==clef)continue;const x=hit+(n.at-beat)/step()*space;if(x<hit-38||x>right+25)continue;
+ const b=base,p=n.spell.step-bottom,y=b-p*gap/2;
  const color=n.result==='correct'?'#168654':n.result?'#c64c48':'#20252b';const alpha=n.result?.65:1;
  s+=`<g opacity="${alpha}">`;
  for(let j=-2;j>=p;j-=2)s+=`<line x1="${x-13}" x2="${x+13}" y1="${b-j*gap/2}" y2="${b-j*gap/2}" stroke="${color}" stroke-width="1.4"/>`;
@@ -107,12 +105,20 @@ function draw(){
  const up=p<4, stemX=x+(up?6:-6), subdivision=Number($('density').value), endY=y+(up?-35:35);
  s+=`<ellipse cx="${x}" cy="${y}" rx="7.5" ry="4.9" transform="rotate(-20 ${x} ${y})" fill="${color}"/><line x1="${stemX}" x2="${stemX}" y1="${y}" y2="${endY}" stroke="${color}" stroke-width="1.6"/>`;
  if(subdivision>=2)s+=`<path d="M${stemX} ${endY}q${up?14:13} ${up?12:-12} 4 ${up?23:-23}" fill="none" stroke="${color}" stroke-width="2.2"/>`;
- if(hinting){const labelY=layout[n.clef].label;s+=`<text x="${x}" y="${labelY}" text-anchor="middle" fill="${color}" font-family="system-ui,sans-serif" font-size="13" font-weight="700">${n.spell.label}</text>`;}
+ if(hinting){s+=`<text x="${x}" y="${labelY}" text-anchor="middle" fill="${color}" font-family="system-ui,sans-serif" font-size="13" font-weight="700">${n.spell.label}</text>`;}
  s+='</g>';
  }
  svg.innerHTML=s+'</g>';
- $('handLabel').textContent=hand==='both'?'Mixed · Grand staff':hand==='treble'?'Right hand · Treble clef':'Left hand · Bass clef';
- $('instruction').textContent=waitMode()?'Notes stop at the line until you play correctly.':'Notes keep moving. Hit each one at the green line.';
+ setTextIfChanged(labelId,clef==='treble'?'Right hand · Treble clef':'Left hand · Bass clef');
+ setTextIfChanged(instructionId,waitMode()?'Notes stop at the line until you play correctly.':'Notes keep moving. Hit each one at the green line.');
+ svg.setAttribute('aria-label',(clef==='treble'?'Right hand':'Left hand')+' scrolling notes and a green hit line');
+}
+function draw() {
+ const both=hand==='both';
+ $('leftPaper').hidden=!both;
+ $('gameScreen').dataset.hands=hand;
+ drawPracticeRow(both?'treble':hand,'staff','paper','handLabel','instruction');
+ if(both)drawPracticeRow('bass','leftStaff','leftPaper','leftHandLabel','leftInstruction');
 }
 function renderKeys(){const cs=hand==='both'?['treble','bass']:[hand],notes=[...new Set(cs.flatMap(c=>poolFor(c,$('range').value,$('acc').value)))].sort((a,b)=>a-b);$('testkeys').replaceChildren(...notes.map(m=>{const b=document.createElement('button');b.textContent=nameOf(m);if(!(m%12 in naturalSteps))b.className='black';b.onclick=()=>play(m);return b;}));}
 function resetTracking(){candidate=null;candidateCount=0;sounding=null;lastEvent=0;priorRms=0;quietFrames=0;pendingAttack=0;lastAnalysis=0;}
@@ -207,7 +213,15 @@ $('middleCLabel').onchange=()=>{
  renderKeys();updateHint();draw();
  NoteStudy.refreshLabels();
 };
-for(const b of document.querySelectorAll('[data-clef]'))b.onclick=()=>{if(hand===b.dataset.clef)return;hand=b.dataset.clef;for(const x of document.querySelectorAll('[data-clef]'))x.setAttribute('aria-pressed',String(x===b));resetTracking();restart(false);};
+function setPracticeHand(value) {
+ if(!['treble','bass','both'].includes(value)||hand===value)return;
+ hand=value;
+ $('gameHands').value=hand;
+ for(const button of document.querySelectorAll('[data-clef]'))button.setAttribute('aria-pressed',String(button.dataset.clef===hand));
+ resetTracking();restart(false);
+}
+for(const button of document.querySelectorAll('[data-clef]'))button.onclick=()=>setPracticeHand(button.dataset.clef);
+$('gameHands').onchange=()=>setPracticeHand($('gameHands').value);
 for(const id of ['density','range','acc','mode'])$(id).onchange=()=>{resetTracking();restart(false);};
 window.addEventListener('resize',()=>{fill();draw();});document.addEventListener('visibilitychange',()=>{
  if(!document.hidden)return;
