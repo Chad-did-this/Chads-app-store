@@ -28,10 +28,10 @@ function loadGame(bridge) {
             replaceChildren(...children) { this.children = children; }};
     }
     const hands = ['treble', 'bass', 'both'].map(clef => Object.assign(node(), {dataset: {clef}}));
-    const studyHands = [0, 1].flatMap(() => ['treble', 'bass', 'both'].map(studyHand =>
-        Object.assign(node(), {dataset: {studyHand}})));
-    const studyRanges = [node(), node()];
-    const studyAccidentals = [node(), node()];
+    const studyHands = ['treble', 'bass', 'both'].map(studyHand =>
+        Object.assign(node(), {dataset: {studyHand}}));
+    const studyRanges = [node()];
+    const studyAccidentals = [node()];
     const selectors = {
         '[data-clef]': hands, '[data-study-hand]': studyHands,
         '[data-study-range]': studyRanges, '[data-study-acc]': studyAccidentals
@@ -205,28 +205,45 @@ test('test-key timing and wait-for-note mode keep their existing scoring', () =>
     assert.equal(app.run('missed'), 0);
 });
 
-test('flashcards reveal a note name and matching piano key without a microphone', () => {
+test('Flashcards opens ordered right and left hand rows with names already visible', () => {
     const app = loadGame();
     app.element('openFlashcards').onclick();
     assert.equal(app.element('flashcardScreen').hidden, false);
-    assert.equal(app.element('flashAnswer').hidden, true);
-    assert.equal(app.element('flashName').textContent, '');
+    const hands = app.element('handCards').children;
+    assert.deepEqual(hands.map(hand => hand.dataset.hand), ['treble', 'bass']);
+    assert.equal(hands[0].children[0].children[0].textContent, 'Right hand');
+    assert.equal(hands[1].children[0].children[0].textContent, 'Left hand');
+    assert.deepEqual(hands[0].children[1].children.map(button => Number(button.dataset.midi)), [48, 50, 52, 53, 55]);
+    assert.deepEqual(hands[1].children[1].children.map(button => Number(button.dataset.midi)), [36, 38, 40, 41, 43]);
+    for (const [index, letter] of ['C', 'D', 'E', 'F', 'G'].entries()) {
+        assert.match(hands[0].children[1].children[index].innerHTML, new RegExp(`<strong>${letter}</strong>`));
+        assert.match(hands[1].children[1].children[index].innerHTML, new RegExp(`<strong>${letter}</strong>`));
+    }
+    assert.match(hands[0].children[1].children[0].innerHTML, /C3/);
+    assert.match(hands[1].children[1].children[0].innerHTML, /C2/);
     assert.equal(app.run('game || mic || starting'), false);
-    const front = app.element('flashStaff').innerHTML;
     app.run('tick(600000)');
-    assert.equal(app.element('flashStaff').innerHTML, front);
-    app.element('flashReveal').onclick();
-    assert.equal(app.element('flashAnswer').hidden, false);
-    const name = app.element('flashName').textContent;
-    assert.match(name, /^[A-G][45]$/);
-    const midi = app.run(`poolFor('treble','beginner','natural').find(m=>spelling(m).label===${JSON.stringify(name)})`);
-    assert.match(app.element('flashKeyboard').innerHTML, new RegExp(`data-midi="${midi}" data-active="true"`));
-    assert.match(app.element('flashKeyHint').textContent, /white key/);
-    app.element('flashNext').onclick();
-    assert.equal(app.element('flashAnswer').hidden, true);
-    assert.equal(app.element('flashKeyboard').innerHTML, '');
-    app.element('flashReveal').onclick();
-    assert.notEqual(app.element('flashName').textContent, name);
+    assert.equal(app.element('handCards').children, hands);
+    for (const hand of hands) {
+        assert.equal([...hand.children[3].innerHTML.matchAll(/data-active="true"/g)].length, 5);
+    }
+});
+
+test('starting C choices update only that hand and match the actual practice notes', () => {
+    const app = loadGame();
+    app.element('openFlashcards').onclick();
+    const rightSelect = app.element('handCards').children[0].children[0].children[1].children[1];
+    assert.equal(rightSelect.value, '48');
+    rightSelect.value = '60';
+    rightSelect.onchange();
+    const hands = app.element('handCards').children;
+    assert.match(hands[0].children[1].children[0].innerHTML, /C4/);
+    assert.match(hands[1].children[1].children[0].innerHTML, /C2/);
+    assert.equal(app.run("nameOf(poolFor('treble','beginner','natural')[0])"), 'C4');
+    assert.equal(app.run("nameOf(poolFor('bass','beginner','natural')[0])"), 'C2');
+    app.element('flashOverviewBack').onclick();
+    app.element('demo').onclick();
+    assert.equal(app.run('queue.every(note=>[60,62,64,65,67].includes(note.m))'), true);
 });
 
 test('staff reference names all five lines and four spaces in both clefs correctly', () => {
@@ -296,9 +313,9 @@ test('guide filters include both clefs, sharps and flats without changing game s
     assert.equal(bass.length, 1);
     assert.match(bass[0].children[0].textContent, /Bass/);
     const bassCards = bass[0].children[1].children;
-    assert.equal(bassCards.length, 8);
-    assert.match(bassCards[0].innerHTML, /<strong>C3<\/strong>/);
-    assert.match(bassCards.at(-1).innerHTML, /<strong>C4<\/strong>/);
+    assert.equal(bassCards.length, 5);
+    assert.match(bassCards[0].innerHTML, /<strong>C2<\/strong>/);
+    assert.match(bassCards.at(-1).innerHTML, /<strong>G2<\/strong>/);
     studyHands.find(button => button.dataset.studyHand === 'both').onclick();
     assert.equal(app.element('guideNotes').children.length, 2);
     const accidentalToggle = app.document.querySelectorAll('[data-study-acc]')[0];
@@ -306,41 +323,56 @@ test('guide filters include both clefs, sharps and flats without changing game s
     accidentalToggle.onchange();
     const trebleCards = app.element('guideNotes').children[0].children[1].children;
     const labels = trebleCards.map(card => card.innerHTML).join('');
-    assert.match(labels, /<strong>C♯4<\/strong>/);
-    assert.match(labels, /<strong>D♭4<\/strong>/);
+    assert.match(labels, /<strong>C♯3<\/strong>/);
+    assert.match(labels, /<strong>D♭3<\/strong>/);
     assert.equal(app.run('hand'), 'treble');
     assert.equal(app.element('acc').value, 'natural');
 });
 
-test('looking up another note restores the original flashcard when returning', () => {
+test('tapping a hand note opens its labeled detail and Back returns to both hand rows', () => {
     const app = loadGame();
     app.element('openFlashcards').onclick();
-    app.element('flashReveal').onclick();
-    const original = app.element('flashName').textContent;
-    app.element('flashGuide').onclick();
-    const cards = app.element('guideNotes').children[0].children[1].children;
-    const other = cards.find(card => !card.innerHTML.includes(`<strong>${original}</strong>`));
-    other.onclick();
+    app.element('handCards').children[0].children[1].children[0].onclick();
+    assert.equal(app.element('noteCardScreen').hidden, false);
+    assert.equal(app.element('flashName').textContent, 'C3');
+    assert.equal(app.element('noteCardTitle').textContent, 'Right hand · C3');
     assert.equal(app.element('flashAnswer').hidden, false);
-    assert.notEqual(app.element('flashName').textContent, original);
+    assert.match(app.element('flashKeyboard').innerHTML, /data-midi="48" data-active="true"/);
     app.element('flashBack').onclick();
-    assert.equal(app.element('noteGuideScreen').hidden, false);
-    app.element('guideBack').onclick();
     assert.equal(app.element('flashcardScreen').hidden, false);
-    assert.equal(app.element('flashAnswer').hidden, false);
-    assert.equal(app.element('flashName').textContent, original);
+    assert.equal(app.element('handCards').children.length, 2);
+    app.element('handCards').children[1].children[1].children[4].onclick();
+    assert.equal(app.element('noteCardTitle').textContent, 'Left hand · G2');
     app.element('flashBack').onclick();
+    app.element('flashOverviewBack').onclick();
     assert.equal(app.element('home').hidden, false);
-    for (const id of ['flashcardScreen', 'noteGuideScreen', 'gameScreen', 'pauseScreen']) {
+    for (const id of ['flashcardScreen', 'noteCardScreen', 'noteGuideScreen', 'gameScreen', 'pauseScreen']) {
         assert.equal(app.element(id).hidden, true);
     }
+});
+
+test('low starting notes stay inside their staff image and away from their labels', () => {
+    const app = loadGame();
+    for (const clef of ['treble', 'bass']) {
+        for (const m of [36, 48, 60, 72]) {
+            const svg = app.run(`studyStaff({m:${m},clef:'${clef}',spell:spelling(${m})})`);
+            const height = Number(svg.match(/viewBox="0 0 320 ([0-9.]+)"/)[1]);
+            const y = Number(svg.match(/<ellipse[^>]+cy="([0-9.]+)"/)[1]);
+            assert.ok(y >= 0 && y + 10 < height);
+        }
+    }
+    app.element('demo').onclick();
+    const svg = app.element('staff').innerHTML;
+    const lowestHead = Math.max(...[...svg.matchAll(/<ellipse[^>]+cy="([0-9.]+)"/g)].map(match => Number(match[1])));
+    const label = Number(svg.match(/<text[^>]+y="([0-9.]+)"/)[1]);
+    assert.ok(label >= lowestHead + 28);
 });
 
 test('visible game name toggle labels each scrolling note and can hide them again', () => {
     const app = loadGame();
     app.element('demo').onclick();
     assert.equal(app.run('hinting'), true);
-    assert.match(app.element('staff').innerHTML, /<text[^>]+>[A-G][45]<\/text>/);
+    assert.match(app.element('staff').innerHTML, /<text[^>]+>[A-G]3<\/text>/);
     app.element('gameNoteNames').onclick();
     assert.equal(app.run('hinting'), false);
     assert.equal(app.element('hintToggle').checked, false);

@@ -43,7 +43,7 @@
     "id": "piano-game",
     "platform": "android",
     "name": "Piano Game",
-    "description": "Learn notes with untimed flashcards, labeled piano keys and a note guide. Endless scrolling practice adds microphone recognition, adjustable tempo, right and left hand modes, timing and scoring. Works offline.",
+    "description": "Learn C D E F G with separate right and left hand flashcards and adjustable starting notes. Labeled piano keys, a note guide and offline microphone practice with tempo controls and scoring.",
     "category": "Music",
     "releasePrefix": "piano-game-v",
     "asset": "piano-game.apk",

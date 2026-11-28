@@ -6,7 +6,15 @@ const CLEFS={"treble": "M314 801Q300 854 291.0 906.0Q282 958 282 1012Q282 1059 2
 const naturalSteps={0:0,2:1,4:2,5:3,7:4,9:5,11:6};
 const letters=['C','D','E','F','G','A','B'];
 function spelling(m,flat=false){let pc=m%12,base=m,acc='';if(!(pc in naturalSteps)){base=m+(flat?1:-1);acc=flat?'♭':'♯';}let step=(Math.floor(base/12)-1)*7+naturalSteps[base%12];return {step,acc,label:letters[naturalSteps[base%12]]+acc+(Math.floor(base/12)-1)};}
-function poolFor(clef,range,acc){const bounds={treble:{beginner:[60,72],staff:[64,77],extended:[57,84]},bass:{beginner:[48,60],staff:[43,57],extended:[36,64]}}[clef][range];const pool=[];for(let m=bounds[0];m<=bounds[1];m++)if(acc==='all'||m%12 in naturalSteps)pool.push(m);return pool;}
+const beginnerRoots = {treble: 48, bass: 36};
+function poolFor(clef,range,acc) {
+ const bounds=range==='beginner'?[beginnerRoots[clef],beginnerRoots[clef]+7]:{
+  treble:{staff:[64,77],extended:[57,84]},bass:{staff:[43,57],extended:[36,64]}
+ }[clef][range];
+ const pool=[];
+ for(let m=bounds[0];m<=bounds[1];m++)if(acc==='all'||m%12 in naturalSteps)pool.push(m);
+ return pool;
+}
 
 let hand='treble', queue=[], nextBeat=0, beat=0, lastTime=null, game=false, paused=false, correct=0, wrong=0, missed=0, streak=0;
 const nativeMicrophone = new NativeMicrophone();
@@ -61,10 +69,18 @@ function play(m,time=performance.now(),source='test'){
  stats();updateHint();draw();
 }
 function draw(){
- const svg=$('staff'),w=Math.max(300,$('paper').clientWidth||340), mixed=hand==='both', h=mixed?320:192;
+ const svg=$('staff'),w=Math.max(300,$('paper').clientWidth||340), mixed=hand==='both';
  const left=8, hit=Math.min(115,Math.max(81,w*.23)), right=w-12, gap=14, scale=.056;
- const baseOf=c=>mixed?(c==='treble'?105:250):111;
  const clefs=mixed?['treble','bass']:[hand];
+ const layout={};let h=0;
+ for(const c of clefs){
+  const bottom=spelling(c==='treble'?64:43).step;
+  const positions=poolFor(c,$('range').value,$('acc').value).flatMap(m=>[spelling(m).step-bottom,spelling(m,true).step-bottom]);
+  const base=h+111+Math.max(0,Math.max(...positions)-12)*gap/2;
+  const label=Math.max(base+65,base-Math.min(0,...positions)*gap/2+28);
+  layout[c]={base,label};h=label+16;
+ }
+ const baseOf=c=>layout[c].base;
  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
  let s=`<defs><clipPath id="notesClip"><rect x="${hit-32}" y="0" width="${w-hit+32}" height="${h}"/></clipPath></defs>`;
  for(const c of clefs){const b=baseOf(c);for(let i=0;i<5;i++)s+=`<line x1="${left}" x2="${right}" y1="${b-i*gap}" y2="${b-i*gap}" stroke="#333a42" stroke-width="1.25"/>`;s+=`<path d="${CLEFS[c]}" transform="translate(17 ${c==='treble'?b:b-6}) scale(${scale} ${-scale})" fill="#1d242b"/>`;}
@@ -81,7 +97,7 @@ function draw(){
  const up=p<4, stemX=x+(up?6:-6), subdivision=Number($('density').value), endY=y+(up?-35:35);
  s+=`<ellipse cx="${x}" cy="${y}" rx="7.5" ry="4.9" transform="rotate(-20 ${x} ${y})" fill="${color}"/><line x1="${stemX}" x2="${stemX}" y1="${y}" y2="${endY}" stroke="${color}" stroke-width="1.6"/>`;
  if(subdivision>=2)s+=`<path d="M${stemX} ${endY}q${up?14:13} ${up?12:-12} 4 ${up?23:-23}" fill="none" stroke="${color}" stroke-width="2.2"/>`;
- if(hinting){const labelY=mixed?(n.clef==='treble'?151:306):176;s+=`<text x="${x}" y="${labelY}" text-anchor="middle" fill="${color}" font-family="system-ui,sans-serif" font-size="13" font-weight="700">${n.spell.label}</text>`;}
+ if(hinting){const labelY=layout[n.clef].label;s+=`<text x="${x}" y="${labelY}" text-anchor="middle" fill="${color}" font-family="system-ui,sans-serif" font-size="13" font-weight="700">${n.spell.label}</text>`;}
  s+='</g>';
  }
  svg.innerHTML=s+'</g>';
@@ -143,7 +159,7 @@ async function startMic() {
 }
 let settingsReturn='home';
 function audioInterrupted(reason){game=false;paused=false;lastTime=null;closeMic();showScreen('home');status('Microphone: '+reason);}
-function showScreen(id){for(const s of ['home','settings','gameScreen','pauseScreen','flashcardScreen','noteGuideScreen'])$(s).hidden=s!==id;if(id==='gameScreen'){fill();draw();}}
+function showScreen(id){for(const s of ['home','settings','gameScreen','pauseScreen','flashcardScreen','noteCardScreen','noteGuideScreen'])$(s).hidden=s!==id;if(id==='gameScreen'){fill();draw();}}
 function togglePause(){if(!game)return;paused=!paused;lastTime=null;resetTracking();if(paused){$('level').style.width='0';showScreen('pauseScreen');}else{showScreen('gameScreen');feedback('Keep playing');}}
 function openSettings(from){settingsReturn=from;showScreen('settings');}
 $('openSettings').onclick=()=>openSettings('home');

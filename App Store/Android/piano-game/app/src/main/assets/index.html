@@ -6,32 +6,24 @@
 <section id="gameScreen" class="game" hidden><div class="top"><span class="eyebrow">PIANO GAME</span><div class="game-actions"><button id="gameNoteNames" aria-pressed="true">Names: On</button><button id="gameNoteGuide">Note guide</button><button id="pause" disabled>Pause</button></div></div><div class="stats"><div class="stat"><strong id="correct">0</strong>Correct</div><div class="stat"><strong id="wrong">0</strong>Wrong</div><div class="stat"><strong id="missed">0</strong>Missed</div><div class="stat"><strong id="streak">0</strong>Streak</div></div><div class="paper" id="paper"><div class="paperhead"><span id="handLabel">Right hand · Treble clef</span><span>HIT AT LINE</span></div><svg id="staff" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Scrolling musical notes and a green hit line"></svg><div class="paperfoot" id="instruction">Play each note at the line.</div></div><div id="feedback" class="feedback" aria-live="polite">Ready to play</div><div id="hintText" class="hint" hidden></div><div class="microw" id="micIndicator"><div class="meter"><div id="level"></div></div><span id="status" role="status">Ready</span></div><div id="keyDetails" hidden><div id="testkeys" class="keys"></div></div></section>
 <section id="pauseScreen" class="pause-screen" hidden><div class="menu"><div class="eyebrow">PIANO GAME</div><h1>Paused</h1><div class="pause-actions"><button id="resume" class="primary">Resume</button><button id="pauseNoteGuide">Note guide</button><button id="pauseSettings">Settings</button><button id="reset">Restart</button><button id="quit">Main menu</button></div></div></section>
 
-<section id="flashcardScreen" class="study" hidden aria-labelledby="flashTitle">
-    <div class="top"><h2 id="flashTitle">Flashcards</h2><button id="flashBack">Back</button></div>
-    <p class="study-intro">Name the note. Tap Reveal to check. Take as long as you need.</p>
-    <div class="study-filters">
-        <div class="hands" role="group" aria-label="Flashcard hand">
-            <button data-study-hand="treble" aria-pressed="true">Right</button>
-            <button data-study-hand="bass" aria-pressed="false">Left</button>
-            <button data-study-hand="both" aria-pressed="false">Mixed</button>
-        </div>
-        <label class="control">Note range<select data-study-range aria-label="Flashcard note range"><option value="beginner">Easy notes</option><option value="staff">Full staff</option><option value="extended">Ledger lines</option></select></label>
-        <label class="study-check"><input type="checkbox" data-study-acc> Include sharps and flats</label>
-    </div>
+<section id="flashcardScreen" class="study hand-study" hidden aria-labelledby="flashTitle">
+    <div class="top"><h2 id="flashTitle">Flashcards</h2><button id="flashOverviewBack">Back</button></div>
+    <p class="study-intro">Right hand and left hand are separate below. Tap a letter to look at that note.</p>
+    <div id="handCards"></div>
+</section>
+<section id="noteCardScreen" class="study" hidden aria-labelledby="noteCardTitle">
+    <div class="top"><h2 id="noteCardTitle">Your note</h2><button id="flashBack">Back</button></div>
     <div class="flash-paper">
-        <div id="flashClef" class="flash-clef">Right hand · Treble clef</div>
+        <div id="flashClef" class="flash-clef"></div>
         <div id="flashStaff"></div>
-        <div id="flashAnswer" class="flash-answer" hidden aria-live="polite">
+        <div id="flashAnswer" class="flash-answer" aria-live="polite">
             <h3 id="flashName"></h3>
             <p id="flashWords"></p>
             <p id="flashPosition" class="small"></p>
             <div id="flashKeyboard" class="study-keyboard"></div>
             <p id="flashKeyHint" class="key-hint"></p>
         </div>
-        <p id="flashPrompt">What note is this?</p>
     </div>
-    <div class="flash-actions"><button id="flashReveal" class="primary">Reveal answer</button><button id="flashNext">Next note</button></div>
-    <button id="flashGuide" class="study-wide">Open note guide</button>
 </section>
 <section id="noteGuideScreen" class="study" hidden aria-labelledby="guideTitle">
     <div class="top"><h2 id="guideTitle">Note guide</h2><button id="guideBack">Back</button></div>
@@ -49,7 +41,7 @@
         <h3>Finding the piano keys</h3>
         <p>The names repeat: <strong>C D E F G A B</strong>. Find a group of <strong>two black keys</strong>. C is the white key just to their left.</p>
         <div id="guideKeyboard" class="study-keyboard"></div>
-        <p><strong>C4 is middle C</strong>, near the center of the piano. The number tells you which octave to use.</p>
+        <p>The letter tells you the note. The number tells you which group of keys to use.</p>
         <p>Read staff lines and spaces from the <strong>bottom up</strong>. Higher notes on the page are farther right on the piano.</p>
     </div>
     <div id="guideNotes"></div>

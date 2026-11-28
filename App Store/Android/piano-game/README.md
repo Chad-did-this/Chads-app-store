@@ -4,7 +4,7 @@ Endless piano sight-reading practice with Android's native AudioRecord microphon
 
 The Android activity handles permission requests and stops recording when the app enters the background. NativeMic owns the recording session, audio-source and sample-rate fallbacks, and PCM frames. The assets folder separates the page, styles, pitch detection, microphone bridge, game logic, and note-study screens.
 
-The home screen offers untimed flashcards with reveal/next controls and a labeled piano keyboard, plus a note guide for either clef. The guide pauses active practice and preserves the current notes and score. Note-name labels start enabled in the scrolling game and can be toggled from its header. Flashcards and the guide need no microphone permission.
+The Flashcards screen immediately shows C D E F G in separate Right hand and Left hand sections, with all names visible. Right-hand beginner practice starts at C3; the left-hand row starts one octave lower at C2. Each Starting C control changes only that hand and its beginner practice range. Tap any letter to enlarge its staff note and piano key. The note guide pauses active practice and preserves the current notes and score. Study screens need no microphone permission. Note-name labels start enabled in scrolling practice.
 
 Record single notes without the sustain pedal. Android microphone privacy and other recording apps can block capture; failures return to the Play screen with a retry message. The on-screen test keys work without microphone permission.
 
