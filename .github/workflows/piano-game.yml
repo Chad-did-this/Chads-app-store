@@ -60,6 +60,6 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release already exists."
           else
-            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Wider timing window and a green hit area that matches scoring. Correct notes inside overlapping windows are matched by pitch, and late notes remain visible until their window closes. Live speed control, both hand rows and microphone sensitivity are preserved."
+            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Fix note scoring so a C press cannot mark a different upcoming note wrong. Incorrect presses leave pending notes available until their own deadlines. A held microphone note must decay before a fresh volume attack can register as another press. Wider timing windows, live speed control and both hand rows remain available."
           fi
 

@@ -21,6 +21,7 @@ let hand='treble', queue=[], nextBeat=0, beat=0, lastTime=null, game=false, paus
 const nativeMicrophone = new NativeMicrophone();
 let mic=false,starting=false,token=0;
 let candidate=null,candidateCount=0,sounding=null,lastEvent=0,priorRms=0,quietFrames=0,pendingAttack=0,lastAnalysis=0;
+let soundingPeak=0,attackArmed=false;
 let lastNote=null, hinting=false, nextHand='treble';
 let currentTempo=Number($('bpm').value)||75;
 const bpm=()=>currentTempo, step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
@@ -73,16 +74,20 @@ function play(m,time=performance.now(),source='test'){
  if(!game||paused)return;
  advanceTo(time);
  const playedAt=beat-(source==='mic'?inputDelayBeats():0);
- let n=null;
- if(waitMode()){const a=active();if(a&&Math.abs(a.at-beat)<=windowBeats())n=a;}
+ let n=null,inHitArea=false;
+ if(waitMode()){
+  const a=active();
+  inHitArea=Boolean(a&&Math.abs(a.at-beat)<=windowBeats());
+  if(inHitArea&&a.m===m)n=a;
+ }
  else {
   const candidates=queue.filter(x=>x.result===null&&Math.abs(x.at-playedAt)<=windowBeats());
+  inHitArea=candidates.length>0;
   candidates.sort((a,b)=>Math.abs(a.at-playedAt)-Math.abs(b.at-playedAt));
-  n=candidates.find(x=>x.m===m)||candidates[0]||null;
+  n=candidates.find(x=>x.m===m)||null;
  }
- if(!n){wrong++;streak=0;feedback('Too early or late · '+nameOf(m),'bad');}
- else if(n.m===m){n.result='correct';correct++;streak++;feedback('Correct · '+nameOf(m),'good');}
- else {wrong++;streak=0;if(!waitMode())n.result='wrong';feedback('Wrong · '+nameOf(m),'bad');}
+ if(n){n.result='correct';correct++;streak++;feedback('Correct · '+nameOf(m),'good');}
+ else {wrong++;streak=0;feedback((inHitArea?'Wrong · ':'Too early or late · ')+nameOf(m),'bad');}
  stats();updateHint();draw();
 }
 function drawPracticeRow(clef, svgId, paperId, labelId, instructionId) {
@@ -127,7 +132,7 @@ function draw() {
  if(both)drawPracticeRow('bass','leftStaff','leftPaper','leftHandLabel','leftInstruction');
 }
 function renderKeys(){const cs=hand==='both'?['treble','bass']:[hand],notes=[...new Set(cs.flatMap(c=>poolFor(c,$('range').value,$('acc').value)))].sort((a,b)=>a-b);$('testkeys').replaceChildren(...notes.map(m=>{const b=document.createElement('button');b.textContent=nameOf(m);if(!(m%12 in naturalSteps))b.className='black';b.onclick=()=>play(m);return b;}));}
-function resetTracking(){candidate=null;candidateCount=0;sounding=null;lastEvent=0;priorRms=0;quietFrames=0;pendingAttack=0;lastAnalysis=0;}
+function resetTracking(){candidate=null;candidateCount=0;sounding=null;lastEvent=0;priorRms=0;quietFrames=0;pendingAttack=0;lastAnalysis=0;soundingPeak=0;attackArmed=false;}
 function analyze(time) {
  if(!mic||!game||paused||time-lastAnalysis<26)return;
  lastAnalysis=time;
@@ -145,15 +150,26 @@ function analyze(time) {
  const rms=r.rms;$('level').style.width=microphoneLevel(rms,minimumRms)+'%';
  if(!r.frequency){
   if(++quietFrames===2){
-   candidate=null;candidateCount=0;sounding=null;pendingAttack=0;
+   candidate=null;candidateCount=0;sounding=null;pendingAttack=0;soundingPeak=0;attackArmed=false;
    status(rms<minimumRms?'Listening · quiet input':'Listening · waiting for a clear piano note');
   }
   priorRms=rms;return;
  }
  quietFrames=0;const m=Math.round(69+12*Math.log2(r.frequency/440));if(m<21||m>108){priorRms=rms;return;}
- if(rms>Math.max(minimumRms*1.25,priorRms*1.65)&&time-lastEvent>85)pendingAttack=time;
+ if(m===sounding){
+  soundingPeak=Math.max(soundingPeak,rms);
+  if(rms<soundingPeak*.6)attackArmed=true;
+ }
+ if((m!==sounding||attackArmed)&&rms>Math.max(minimumRms*1.25,priorRms*1.65)&&time-lastEvent>85)pendingAttack=time;
  if(m===candidate)candidateCount++;else{candidate=m;candidateCount=1;}
- if(candidateCount>=2){const changed=m!==sounding,reattack=!changed&&pendingAttack>lastEvent&&time-pendingAttack<130&&time-lastEvent>85;if(changed||reattack){play(m,time,'mic');sounding=m;lastEvent=time;pendingAttack=0;status('Heard '+nameOf(m));}}
+ if(candidateCount>=2){
+  const changed=m!==sounding;
+  const reattack=!changed&&attackArmed&&pendingAttack>lastEvent&&time-pendingAttack<130&&time-lastEvent>85;
+  if(changed||reattack){
+   play(m,time,'mic');sounding=m;lastEvent=time;pendingAttack=0;soundingPeak=rms;attackArmed=false;
+   status('Heard '+nameOf(m));
+  }
+ }
  priorRms=rms;
 }
 function tick(t){if(game&&!paused){advanceTo(t);analyze(t);draw();}requestAnimationFrame(tick);}

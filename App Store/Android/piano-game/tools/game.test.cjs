@@ -827,13 +827,92 @@ test('overlapping windows match the played pitch even when the other hand is clo
     assert.equal(app.run('wrong+missed'), 0);
 });
 
-test('a wrong pitch inside the green area still counts as wrong', () => {
+test('a wrong pitch counts as an input error and leaves the note available to play', () => {
     const app = loadGame();
     app.run(`game=true;beat=4;lastTime=100;nextBeat=100;
         queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null}];play(62,100);`);
     assert.equal(app.run('correct'), 0);
     assert.equal(app.run('wrong'), 1);
-    assert.equal(app.run('queue[0].result'), 'wrong');
+    assert.equal(app.run('queue[0].result'), null);
+    app.run('play(60,100);');
+    assert.equal(app.run('correct'), 1);
+    assert.equal(app.run('wrong'), 1);
+    assert.equal(app.run('missed'), 0);
+    assert.equal(app.run('queue[0].result'), 'correct');
+});
+
+test('pressing C again leaves the next D available, including overlapping windows in either hand', () => {
+    for (const [tempo, density] of [[30,1],[75,1],[75,2],[180,2]]) {
+        for (const clef of ['treble','bass']) {
+            for (const source of ['test','mic']) {
+                const app = loadGame();
+                const c = clef === 'treble' ? 60 : 48;
+                app.element('density').value = String(density);
+                app.run(`setPracticeTempo(${tempo});game=true;mic=${source === 'mic'};lastTime=100;nextBeat=100;
+                    queue=[{m:${c},clef:'${clef}',spell:spelling(${c}),at:4,result:null},
+                           {m:${c+2},clef:'${clef}',spell:spelling(${c+2}),at:4+step(),result:null}];
+                    beat=4+inputDelayBeats();play(${c},100,'${source}');`);
+                assert.equal(app.run('correct'), 1);
+                assert.equal(app.run('queue[1].result'), null);
+                app.run(`beat=4+step()*0.8+inputDelayBeats();play(${c},100,'${source}');`);
+                assert.equal(app.run('wrong'), 1);
+                assert.equal(app.run('queue[1].result'), null);
+                app.run(`beat=4+step()+inputDelayBeats();play(${c+2},100,'${source}');`);
+                assert.equal(app.run('correct'), 2);
+                assert.equal(app.run('missed'), 0);
+            }
+        }
+    }
+});
+
+test('an early C cannot consume a different due note or its own future note', () => {
+    const app = loadGame();
+    app.run(`setPracticeHand('both');game=true;beat=4;lastTime=100;nextBeat=100;
+        queue=[{m:48,clef:'bass',spell:spelling(48),at:4,result:null},
+               {m:60,clef:'treble',spell:spelling(60),at:5,result:null}];play(60,100);`);
+    assert.equal(app.run('correct'), 0);
+    assert.equal(app.run('wrong'), 1);
+    assert.equal(app.run('queue.every(n=>n.result===null)'), true);
+    app.run('play(48,100);beat=5;play(60,100);');
+    assert.equal(app.run('correct'), 2);
+    assert.equal(app.run('missed'), 0);
+});
+
+test('a wrong input leaves overlapping notes to miss once at their own deadlines', () => {
+    const app = loadGame();
+    app.run(`game=true;beat=4.5;lastTime=100;nextBeat=100;
+        queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null},
+               {m:62,clef:'treble',spell:spelling(62),at:5,result:null}];play(64,100);`);
+    assert.equal(app.run('queue.every(n=>n.result===null)'), true);
+    app.run('beat=4+windowBeats()+0.01;advanceTo(100);advanceTo(100);');
+    assert.equal(app.run('missed'), 1);
+    assert.equal(app.run('queue[1].result'), null);
+    app.run('beat=5+windowBeats()+0.01;advanceTo(100);advanceTo(100);');
+    assert.equal(app.run('missed'), 2);
+    assert.equal(app.run('wrong'), 1);
+});
+
+test('a held microphone C growing louder is not another press on an upcoming D', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.run(`beat=4;lastTime=200;nextBeat=100;
+        queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null},
+               {m:62,clef:'treble',spell:spelling(62),at:4.5,result:null}];`);
+    for (const [sequence,time,amplitude] of [[1,200,0.001],[2,240,0.001],[3,360,0.002],[4,400,0.002]]) {
+        bridge.packet = quietPianoPacket(sequence, amplitude);
+        app.run(`advanceTo(${time});analyze(${time});`);
+    }
+    assert.equal(app.run('correct'), 1);
+    assert.equal(app.run('wrong+missed'), 0);
+    assert.equal(app.run('queue[1].result'), null);
+    bridge.packet = quietPianoPacket(5, 0.002, 62);
+    app.run('advanceTo(440);analyze(440);');
+    bridge.packet = quietPianoPacket(6, 0.002, 62);
+    app.run('advanceTo(480);analyze(480);');
+    assert.equal(app.run('correct'), 2);
+    assert.equal(app.run('wrong+missed'), 0);
+    app.run('closeMic()');
 });
 
 test('notes near both edges of the drawn green area remain visible and score in either hand', () => {
