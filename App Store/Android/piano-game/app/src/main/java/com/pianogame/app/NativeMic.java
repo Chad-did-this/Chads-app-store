@@ -140,7 +140,6 @@ final class NativeMic {
                     byte[] bytes = new byte[WINDOW * 2];
                     int position = 0;
                     int filled = 0;
-                    int zeroSamples = 0;
                     long sequence = 0;
 
                     while (!session.cancelled) {
@@ -155,17 +154,9 @@ final class NativeMic {
                             ring[position] = block[i];
                             position = (position + 1) % WINDOW;
                             if (filled < WINDOW) filled++;
-                            zeroSamples = block[i] == 0 ? zeroSamples + 1 : 0;
                         }
 
-                        if (zeroSamples >= actualRate * 2) {
-                            if (produced) {
-                                publish(session, "Microphone stopped returning audio. Check microphone privacy and tap Play again.", null);
-                                return;
-                            }
-                            break;
-                        }
-                        if (filled < WINDOW || zeroSamples >= WINDOW) continue;
+                        if (filled < WINDOW) continue;
 
                         for (int i = 0; i < WINDOW; i++) {
                             short value = ring[(position + i) % WINDOW];
@@ -179,7 +170,6 @@ final class NativeMic {
                         publish(session, "ready", packet);
                     }
 
-                    if (zeroSamples >= actualRate * 2) break;
                 } catch (SecurityException error) {
                     publish(session, "Permission denied or microphone disabled in Android settings.", null);
                     return;

@@ -76,6 +76,21 @@ public final class NativeMicTest {
         assertEquals("", mic.frame());
     }
 
+    @Test public void unsupportedSourceFallsBackToTheNextSource() throws Exception {
+        List<Integer> sources = Collections.synchronizedList(new ArrayList<>());
+        FakeRecorder working = new FakeRecorder();
+        working.feed(4, 20);
+        mic = new NativeMic((source, rate) -> {
+            sources.add(source);
+            return source == 9 ? null : working;
+        });
+        mic.start();
+        await(() -> mic.status().equals("ready"));
+
+        assertEquals(Arrays.asList(9, 9, 9, 9, 9, 1), sources);
+        assertEquals(1, working.starts);
+    }
+
     @Test public void newSessionCannotReceiveOldSessionFrames() throws Exception {
         FakeRecorder first = new FakeRecorder();
         first.feed(1, 20);
@@ -106,20 +121,17 @@ public final class NativeMicTest {
         assertTrue(recorder.released.await(1, TimeUnit.SECONDS));
     }
 
-    @Test public void zeroOnlyAudioTriesEachSourceInsteadOfClaimingToListen() throws Exception {
-        List<Integer> sources = Collections.synchronizedList(new ArrayList<>());
-        mic = new NativeMic((source, rate) -> {
-            sources.add(source);
-            FakeRecorder recorder = new FakeRecorder();
-            recorder.feed(0, 100);
-            return recorder;
-        });
+    @Test public void quietPausesKeepAHealthyMicrophoneListening() throws Exception {
+        FakeRecorder recorder = new FakeRecorder();
+        recorder.feed(0, 100);
+        mic = new NativeMic((source, rate) -> recorder);
         mic.start();
-        await(() -> mic.status().startsWith("Unable to record"));
+        await(() -> mic.status().equals("ready") && recorder.blocks.isEmpty());
 
-        assertEquals(4, sources.size());
-        assertEquals(4, sources.stream().distinct().count());
-        assertEquals("", mic.frame());
+        assertEquals("ready", mic.status());
+        byte[] pcm = Base64.getDecoder().decode(mic.frame().split(":", 3)[2]);
+        assertArrayEquals(new byte[8192], pcm);
+        assertEquals(1, recorder.starts);
     }
 
     @Test public void readFailureClearsTheLastFrameAndAllowsRetry() throws Exception {
