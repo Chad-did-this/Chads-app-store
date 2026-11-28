@@ -19,7 +19,7 @@ function loadGame(bridge) {
         return elements.get(id);
     }
     for (const [id, value] of Object.entries({
-        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3', micSensitivity: 'high', micSensitivityQuick: 'high', gameHands: 'treble'
+        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3', micSensitivity: 'high', micSensitivityQuick: 'high', gameHands: 'treble', gameBpm: '75'
     })) element(id).value = value;
     element('hintToggle').checked = true;
     function node() {
@@ -700,4 +700,71 @@ test('both hand rows score their microphone notes in order without restarting au
     assert.equal(bridge.stops, stops);
     assert.equal(app.run('mic'), true);
     app.run('closeMic()');
+});
+
+test('live speed changes sync with settings and preserve both hand notes, scores and audio', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.run("setPracticeHand('both');correct=7;wrong=2;missed=1;streak=3;advanceTo(100);sounding=60;candidate=60;candidateCount=2;");
+    const notes = app.run('queue.slice()');
+    const timeline = app.run('JSON.stringify(queue)');
+    const stops = bridge.stops;
+    app.element('gameBpm').value = '180';
+    app.element('gameBpm').oninput();
+    assert.equal(app.run('bpm()'), 180);
+    assert.equal(app.element('bpm').value, '180');
+    assert.equal(app.element('bpmOut').textContent, '180 BPM');
+    assert.equal(app.element('gameBpmOut').textContent, '180 BPM');
+    assert.equal(app.run('JSON.stringify(queue)'), timeline);
+    assert.ok(app.run('queue').every((note, index) => note === notes[index]));
+    assert.equal(app.run('beat'), 0);
+    assert.equal(app.run('JSON.stringify([correct,wrong,missed,streak])'), '[7,2,1,3]');
+    assert.equal(app.run('hand'), 'both');
+    assert.equal(app.element('leftPaper').hidden, false);
+    assert.equal(app.run('game && mic && !paused'), true);
+    assert.equal(app.run('sounding===60 && candidate===60 && candidateCount===2'), true);
+    assert.equal(bridge.stops, stops);
+    app.run('closeMic()');
+});
+
+test('tempo changes account for elapsed time at the old speed before using the new speed', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    app.run('advanceTo(100);setPracticeTempo(150,200);');
+    assert.equal(app.run('beat'), 0.125);
+    app.run('advanceTo(300)');
+    assert.equal(app.run('beat'), 0.375);
+    app.context.performance.now = () => 400;
+    app.element('bpm').value = '30';
+    app.element('bpm').oninput();
+    assert.equal(app.element('gameBpm').value, '30');
+    assert.equal(app.element('gameBpmOut').textContent, '30 BPM');
+    assert.equal(app.run('beat'), 0.625);
+    app.run('advanceTo(500)');
+    assert.equal(app.run('beat'), 0.675);
+});
+
+test('changing speed while paused keeps the pause and resumes at the selected tempo', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    app.run('advanceTo(100);togglePause();setPracticeTempo(120,5000);');
+    assert.equal(app.run('paused'), true);
+    assert.equal(app.run('beat'), 0);
+    assert.equal(app.run('lastTime'), null);
+    assert.equal(app.element('gameBpm').value, '120');
+    app.run('togglePause();advanceTo(10000);advanceTo(10100);');
+    assert.equal(app.run('beat'), 0.2);
+});
+
+test('live speed changes preserve wait mode at the current note', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    app.element('mode').value = 'wait';
+    app.run('beat=3;lastTime=100;setPracticeTempo(180,200);advanceTo(300);');
+    assert.equal(app.run('beat'), 3);
+    assert.equal(app.run('active().at'), 3);
+    assert.equal(app.run('wrong+missed'), 0);
+    app.run('play(active().m,300);');
+    assert.equal(app.run('correct'), 1);
 });

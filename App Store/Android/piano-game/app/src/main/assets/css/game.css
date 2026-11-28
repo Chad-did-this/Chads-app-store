@@ -781,3 +781,45 @@ input[type=range] {
     gap:12px;
     width:100%;
 }
+
+.play-controls {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:14px;
+    min-width:0;
+}
+
+.play-speed-control {
+    display:grid;
+    gap:4px;
+    min-width:0;
+    color:var(--muted);
+    font-size:14px;
+}
+
+.play-speed-control>span {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:6px;
+    height:20px;
+    line-height:20px;
+    white-space:nowrap;
+}
+
+.play-speed-control output {
+    width:7ch;
+    flex:0 0 7ch;
+    text-align:right;
+    color:var(--ink);
+    font-variant-numeric:tabular-nums;
+}
+
+.play-speed-control input[type=range] {
+    width:100%;
+    min-width:0;
+    height:28px;
+    margin:0;
+    touch-action:pan-y;
+}

@@ -60,6 +60,6 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release already exists."
           else
-            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Choose Right hand, Left hand or Both hands directly while playing. Both hands shows matching treble and bass rows with aligned hit lines and alternating notes. Stable message layout and existing microphone sensitivity are preserved."
+            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Adjust the Speed slider above the moving notes while playing, from 30 to 180 BPM. Settings stays synced, and the current notes, score and microphone session continue. Both hand rows use the selected tempo."
           fi
 

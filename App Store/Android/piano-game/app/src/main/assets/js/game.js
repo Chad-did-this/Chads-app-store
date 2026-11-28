@@ -22,7 +22,8 @@ const nativeMicrophone = new NativeMicrophone();
 let mic=false,starting=false,token=0;
 let candidate=null,candidateCount=0,sounding=null,lastEvent=0,priorRms=0,quietFrames=0,pendingAttack=0,lastAnalysis=0;
 let lastNote=null, hinting=false, nextHand='treble';
-const bpm=()=>Number($('bpm').value), step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
+let currentTempo=Number($('bpm').value)||75;
+const bpm=()=>currentTempo, step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
 const windowBeats=()=>Math.min(step()*.44,bpm()/60*.35);
 const inputDelayBeats=()=>mic&&!waitMode()?bpm()/60000*75:0;
 const minimumMicRms=()=>microphoneThreshold($('micSensitivity').value||'high');
@@ -207,7 +208,19 @@ function setMicrophoneSensitivity(level) {
 }
 $('micSensitivity').onchange=()=>setMicrophoneSensitivity($('micSensitivity').value);
 $('micSensitivityQuick').onchange=()=>setMicrophoneSensitivity($('micSensitivityQuick').value);
-$('bpm').oninput=()=>{$('bpmOut').textContent=bpm()+' BPM';};
+function setPracticeTempo(value, time=performance.now()) {
+ const numeric=Number(value);
+ if(!Number.isFinite(numeric))return;
+ const next=Math.max(30,Math.min(180,Math.round(numeric/5)*5));
+ if(next!==currentTempo&&game&&!paused)advanceTo(time);
+ currentTempo=next;
+ $('bpm').value=String(next);
+ $('gameBpm').value=String(next);
+ setTextIfChanged('bpmOut',next+' BPM');
+ setTextIfChanged('gameBpmOut',next+' BPM');
+}
+$('bpm').oninput=()=>setPracticeTempo($('bpm').value);
+$('gameBpm').oninput=()=>setPracticeTempo($('gameBpm').value);
 $('middleCLabel').onchange=()=>{
  for(const note of queue)note.spell=spelling(note.m,note.spell.acc==='♭');
  renderKeys();updateHint();draw();

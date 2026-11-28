@@ -65,7 +65,7 @@ const messages = [
     ['Missed note','Microphone listening · play your piano'],
     ['Get ready…','Listening · quiet input']
 ];
-const anchors = ['gameScreen','practiceRows','gameHands','paper','gameFooter','feedback','hintSlot','micIndicator','status','micSensitivityQuick'];
+const anchors = ['gameScreen','practiceRows','gameHands','gameBpm','gameBpmOut','paper','gameFooter','feedback','hintSlot','micIndicator','status','micSensitivityQuick'];
 function snapshot(doc) {
     const visibleAnchors = doc.getElementById('leftPaper').hidden ? anchors : [...anchors,'leftPaper'];
     return Object.fromEntries(visibleAnchors.map(id => {
@@ -108,6 +108,13 @@ function snapshot(doc) {
             const scrollTop = doc.scrollingElement.scrollTop;
             const scrollHeight = doc.scrollingElement.scrollHeight;
             for (let pass=0;pass<3;pass++) {
+                const speed = [30,75,180][pass];
+                const speedControl = doc.getElementById('gameBpm');
+                speedControl.value = String(speed);
+                speedControl.dispatchEvent(new frame.contentWindow.Event('input',{bubbles:true}));
+                if (doc.getElementById('bpm').value !== String(speed) || doc.getElementById('gameBpmOut').textContent !== `${speed} BPM`) {
+                    throw new Error('Live speed control did not sync with Settings');
+                }
                 const showNames = pass !== 1;
                 if (doc.getElementById('hintToggle').checked !== showNames) doc.getElementById('gameNoteNames').click();
                 for (const [feedback,status] of messages) {
