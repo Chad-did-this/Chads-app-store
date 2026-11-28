@@ -101,6 +101,10 @@ public final class MainActivity extends Activity {
                 file = "js/game.js";
                 type = "application/javascript";
                 break;
+            case ROOT + "js/note-study.js":
+                file = "js/note-study.js";
+                type = "application/javascript";
+                break;
             default:
                 return blocked();
         }

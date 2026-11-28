@@ -7,7 +7,7 @@ def check_apk(path):
     with ZipFile(path) as apk:
         for resource in (
             "index.html", "css/game.css", "js/pitch.js",
-            "js/native-microphone.js", "js/game.js",
+            "js/native-microphone.js", "js/game.js", "js/note-study.js",
         ):
             apk.read("assets/" + resource)
 

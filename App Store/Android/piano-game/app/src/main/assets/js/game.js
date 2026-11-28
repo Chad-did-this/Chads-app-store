@@ -28,7 +28,13 @@ function fill(){const limit=beat+step()*(lookahead()+2);while(nextBeat<=limit){q
 function status(s){$('status').textContent=s;if(!$('home').hidden)$('homeStatus').textContent=s;}
 function feedback(s,kind=''){$('feedback').textContent=s;$('feedback').className='feedback '+kind;}
 function stats(){for(const [id,v] of Object.entries({correct,wrong,missed,streak}))$(id).textContent=v;}
-function updateHint(){const n=active();$('hintText').hidden=!hinting;$('hintText').textContent=hinting&&n?n.spell.label:'';}
+function updateHint() {
+ const n=active();
+ $('hintText').hidden=!hinting;
+ $('hintText').textContent=hinting&&n?'Next note: '+n.spell.label:'';
+ $('gameNoteNames').textContent=hinting?'Names: On':'Show names';
+ $('gameNoteNames').setAttribute('aria-pressed',String(hinting));
+}
 function restart(clearScore=true){
  if(clearScore){correct=wrong=missed=streak=0;stats();}
  beat=0;lastTime=null;lastNote=null;queue=[];nextBeat=step()*3;hinting=$('hintToggle').checked;fill();draw();updateHint();feedback(game?'Get ready…':'Ready to play');renderKeys();
@@ -75,6 +81,7 @@ function draw(){
  const up=p<4, stemX=x+(up?6:-6), subdivision=Number($('density').value), endY=y+(up?-35:35);
  s+=`<ellipse cx="${x}" cy="${y}" rx="7.5" ry="4.9" transform="rotate(-20 ${x} ${y})" fill="${color}"/><line x1="${stemX}" x2="${stemX}" y1="${y}" y2="${endY}" stroke="${color}" stroke-width="1.6"/>`;
  if(subdivision>=2)s+=`<path d="M${stemX} ${endY}q${up?14:13} ${up?12:-12} 4 ${up?23:-23}" fill="none" stroke="${color}" stroke-width="2.2"/>`;
+ if(hinting){const labelY=mixed?(n.clef==='treble'?151:306):176;s+=`<text x="${x}" y="${labelY}" text-anchor="middle" fill="${color}" font-family="system-ui,sans-serif" font-size="13" font-weight="700">${n.spell.label}</text>`;}
  s+='</g>';
  }
  svg.innerHTML=s+'</g>';
@@ -136,7 +143,7 @@ async function startMic() {
 }
 let settingsReturn='home';
 function audioInterrupted(reason){game=false;paused=false;lastTime=null;closeMic();showScreen('home');status('Microphone: '+reason);}
-function showScreen(id){for(const s of ['home','settings','gameScreen','pauseScreen'])$(s).hidden=s!==id;if(id==='gameScreen'){fill();draw();}}
+function showScreen(id){for(const s of ['home','settings','gameScreen','pauseScreen','flashcardScreen','noteGuideScreen'])$(s).hidden=s!==id;if(id==='gameScreen'){fill();draw();}}
 function togglePause(){if(!game)return;paused=!paused;lastTime=null;resetTracking();if(paused){$('level').style.width='0';showScreen('pauseScreen');}else{showScreen('gameScreen');feedback('Keep playing');}}
 function openSettings(from){settingsReturn=from;showScreen('settings');}
 $('openSettings').onclick=()=>openSettings('home');
@@ -148,7 +155,11 @@ $('pause').onclick=togglePause;
 $('resume').onclick=togglePause;
 $('reset').onclick=()=>{paused=false;showScreen('gameScreen');resetTracking();restart(true);};
 $('quit').onclick=()=>{game=false;paused=false;lastTime=null;closeMic();$('homeStatus').textContent='';showScreen('home');};
-$('hintToggle').onchange=()=>{hinting=$('hintToggle').checked;updateHint();};
+$('hintToggle').onchange=()=>{hinting=$('hintToggle').checked;updateHint();draw();};
+$('gameNoteNames').onclick=()=>{
+ $('hintToggle').checked=!$('hintToggle').checked;
+ $('hintToggle').onchange();
+};
 $('bpm').oninput=()=>{$('bpmOut').textContent=bpm()+' BPM';};
 for(const b of document.querySelectorAll('[data-clef]'))b.onclick=()=>{if(hand===b.dataset.clef)return;hand=b.dataset.clef;for(const x of document.querySelectorAll('[data-clef]'))x.setAttribute('aria-pressed',String(x===b));resetTracking();restart(false);};
 for(const id of ['density','range','acc','mode'])$(id).onchange=()=>{resetTracking();restart(false);};

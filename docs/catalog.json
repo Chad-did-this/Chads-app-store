@@ -43,7 +43,7 @@
     "id": "piano-game",
     "platform": "android",
     "name": "Piano Game",
-    "description": "Endless scrolling sheet-music practice with microphone recognition, adjustable tempo, right and left hand modes, timing and scoring. Works offline.",
+    "description": "Learn notes with untimed flashcards, labeled piano keys and a note guide. Endless scrolling practice adds microphone recognition, adjustable tempo, right and left hand modes, timing and scoring. Works offline.",
     "category": "Music",
     "releasePrefix": "piano-game-v",
     "asset": "piano-game.apk",
