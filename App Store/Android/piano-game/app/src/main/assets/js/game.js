@@ -24,7 +24,7 @@ let candidate=null,candidateCount=0,sounding=null,lastEvent=0,priorRms=0,quietFr
 let lastNote=null, hinting=false, nextHand='treble';
 let currentTempo=Number($('bpm').value)||75;
 const bpm=()=>currentTempo, step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
-const windowBeats=()=>Math.min(step()*.44,bpm()/60*.35);
+const windowBeats=()=>Math.min(step()*.8,bpm()/60*.6);
 const inputDelayBeats=()=>mic&&!waitMode()?bpm()/60000*75:0;
 const minimumMicRms=()=>microphoneThreshold($('micSensitivity').value||'high');
 const lookahead=()=>Math.max(3.8,Math.min(7,($('paper').clientWidth-125)/55));
@@ -74,8 +74,12 @@ function play(m,time=performance.now(),source='test'){
  advanceTo(time);
  const playedAt=beat-(source==='mic'?inputDelayBeats():0);
  let n=null;
- if(waitMode()){const a=active();if(a&&Math.abs(a.at-beat)<windowBeats())n=a;}
- else {const candidates=queue.filter(x=>x.result===null&&Math.abs(x.at-playedAt)<=windowBeats());n=candidates.sort((a,b)=>Math.abs(a.at-playedAt)-Math.abs(b.at-playedAt))[0]||null;}
+ if(waitMode()){const a=active();if(a&&Math.abs(a.at-beat)<=windowBeats())n=a;}
+ else {
+  const candidates=queue.filter(x=>x.result===null&&Math.abs(x.at-playedAt)<=windowBeats());
+  candidates.sort((a,b)=>Math.abs(a.at-playedAt)-Math.abs(b.at-playedAt));
+  n=candidates.find(x=>x.m===m)||candidates[0]||null;
+ }
  if(!n){wrong++;streak=0;feedback('Too early or late · '+nameOf(m),'bad');}
  else if(n.m===m){n.result='correct';correct++;streak++;feedback('Correct · '+nameOf(m),'good');}
  else {wrong++;streak=0;if(!waitMode())n.result='wrong';feedback('Wrong · '+nameOf(m),'bad');}
@@ -83,7 +87,9 @@ function play(m,time=performance.now(),source='test'){
 }
 function drawPracticeRow(clef, svgId, paperId, labelId, instructionId) {
  const svg=$(svgId),w=Math.max(300,$(paperId).clientWidth||340);
- const left=8, hit=Math.min(115,Math.max(81,w*.23)), right=w-12, gap=14, scale=.056;
+ const left=8, hit=Math.max(135,w*.28), right=w-12, gap=14, scale=.056;
+ const space=(right-hit)/lookahead(), zone=windowBeats()/step()*space;
+ const zoneStart=hit-inputDelayBeats()/step()*space-zone, clipLeft=Math.max(left,zoneStart-16);
  const bottom=spelling(clef==='treble'?64:43).step;
  const positions=poolFor(clef,$('range').value,$('acc').value).flatMap(m=>[spelling(m).step-bottom,spelling(m,true).step-bottom]);
  const base=111+Math.max(0,Math.max(...positions)-12)*gap/2;
@@ -91,11 +97,10 @@ function drawPracticeRow(clef, svgId, paperId, labelId, instructionId) {
  const h=labelY+16;
  const clipId='notesClip-'+svgId;
  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
- let s=`<defs><clipPath id="${clipId}"><rect x="${hit-32}" y="0" width="${w-hit+32}" height="${h}"/></clipPath></defs>`;
+ let s=`<defs><clipPath id="${clipId}"><rect x="${clipLeft}" y="0" width="${w-clipLeft}" height="${h}"/></clipPath></defs>`;
  {const c=clef,b=base;for(let i=0;i<5;i++)s+=`<line x1="${left}" x2="${right}" y1="${b-i*gap}" y2="${b-i*gap}" stroke="#333a42" stroke-width="1.25"/>`;s+=`<path d="${CLEFS[c]}" transform="translate(17 ${c==='treble'?b:b-6}) scale(${scale} ${-scale})" fill="#1d242b"/>`;}
- s+=`<rect x="${hit-12}" y="5" width="24" height="${h-10}" rx="6" fill="#23a66a" opacity=".11"/><line x1="${hit}" x2="${hit}" y1="5" y2="${h-5}" stroke="#168654" stroke-width="2.5" stroke-dasharray="5 4"/><path d="M${hit-5} 3h10l-5 7z" fill="#168654"/><g clip-path="url(#${clipId})">`;
- const space=(right-hit)/lookahead();
- for(const n of queue){if(n.clef!==clef)continue;const x=hit+(n.at-beat)/step()*space;if(x<hit-38||x>right+25)continue;
+ s+=`<rect data-hit-zone="true" x="${zoneStart}" y="5" width="${zone*2}" height="${h-10}" rx="6" fill="#23a66a" opacity=".15"/><line x1="${hit}" x2="${hit}" y1="5" y2="${h-5}" stroke="#168654" stroke-width="2.5" stroke-dasharray="5 4"/><path d="M${hit-5} 3h10l-5 7z" fill="#168654"/><g clip-path="url(#${clipId})">`;
+ for(const n of queue){if(n.clef!==clef)continue;const x=hit+(n.at-beat)/step()*space;if(x<clipLeft-8||x>right+25)continue;
  const b=base,p=n.spell.step-bottom,y=b-p*gap/2;
  const color=n.result==='correct'?'#168654':n.result?'#c64c48':'#20252b';const alpha=n.result?.65:1;
  s+=`<g opacity="${alpha}">`;
@@ -111,8 +116,8 @@ function drawPracticeRow(clef, svgId, paperId, labelId, instructionId) {
  }
  svg.innerHTML=s+'</g>';
  setTextIfChanged(labelId,clef==='treble'?'Right hand · Treble clef':'Left hand · Bass clef');
- setTextIfChanged(instructionId,waitMode()?'Notes stop at the line until you play correctly.':'Notes keep moving. Hit each one at the green line.');
- svg.setAttribute('aria-label',(clef==='treble'?'Right hand':'Left hand')+' scrolling notes and a green hit line');
+ setTextIfChanged(instructionId,waitMode()?'Notes stop at the line until you play correctly.':'Play each note while it is in the green area.');
+ svg.setAttribute('aria-label',(clef==='treble'?'Right hand':'Left hand')+' scrolling notes and a green hit area');
 }
 function draw() {
  const both=hand==='both';

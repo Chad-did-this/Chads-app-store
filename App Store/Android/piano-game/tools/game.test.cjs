@@ -768,3 +768,103 @@ test('live speed changes preserve wait mode at the current note', () => {
     app.run('play(active().m,300);');
     assert.equal(app.run('correct'), 1);
 });
+
+test('the wider window accepts early and late notes at slow, normal and fast speeds', () => {
+    for (const [tempo, density, milliseconds] of [[30,1,500],[75,1,500],[75,2,260],[180,1,230],[180,2,110]]) {
+        for (const source of ['test', 'mic']) {
+            for (const direction of [-1, 1]) {
+                const app = loadGame();
+                app.element('density').value = String(density);
+                app.run(`setPracticeTempo(${tempo});game=true;mic=${source === 'mic'};lastTime=100;nextBeat=100;
+                    queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null}];
+                    beat=4+${direction * milliseconds}*bpm()/60000+inputDelayBeats();play(60,100,'${source}');`);
+                assert.equal(app.run('correct'), 1, `${tempo} BPM, density ${density}, ${source}, ${direction * milliseconds} ms`);
+                assert.equal(app.run('wrong+missed'), 0);
+            }
+        }
+    }
+});
+
+test('notes outside the wider window still fail and a missed note cannot score later', () => {
+    for (const [tempo, density, milliseconds] of [[30,1,610],[75,1,610],[180,2,150]]) {
+        for (const direction of [-1, 1]) {
+            const app = loadGame();
+            app.element('density').value = String(density);
+            app.run(`setPracticeTempo(${tempo});game=true;mic=true;lastTime=100;nextBeat=100;
+                queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null}];
+                beat=4+${direction * milliseconds}*bpm()/60000+inputDelayBeats();play(60,100,'mic');`);
+            assert.equal(app.run('correct'), 0);
+            assert.equal(app.run('wrong'), 1);
+            assert.equal(app.run('missed'), direction > 0 ? 1 : 0);
+            app.run("play(60,100,'mic')");
+            assert.equal(app.run('correct'), 0);
+            assert.equal(app.run('missed'), direction > 0 ? 1 : 0);
+        }
+    }
+});
+
+test('a note stays eligible until the compensated late deadline and is missed only once', () => {
+    const app = loadGame();
+    app.run(`game=true;mic=true;lastTime=100;nextBeat=100;
+        queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null}];
+        beat=4+0.74+inputDelayBeats();advanceTo(100);`);
+    assert.equal(app.run('missed'), 0);
+    app.run('beat=4+0.76+inputDelayBeats();advanceTo(100);advanceTo(100);');
+    assert.equal(app.run('missed'), 1);
+});
+
+test('overlapping windows match the played pitch even when the other hand is closer', () => {
+    const app = loadGame();
+    app.run(`setPracticeHand('both');game=true;beat=3.6;lastTime=100;nextBeat=100;
+        queue=[{m:60,clef:'treble',spell:spelling(60),at:3,result:null},
+               {m:48,clef:'bass',spell:spelling(48),at:4,result:null}];play(60,100);`);
+    assert.equal(app.run('correct'), 1);
+    assert.equal(app.run('wrong+missed'), 0);
+    assert.equal(app.run('queue[0].result'), 'correct');
+    assert.equal(app.run('queue[1].result'), null);
+    app.run('play(48,100);');
+    assert.equal(app.run('correct'), 2);
+    assert.equal(app.run('wrong+missed'), 0);
+});
+
+test('a wrong pitch inside the green area still counts as wrong', () => {
+    const app = loadGame();
+    app.run(`game=true;beat=4;lastTime=100;nextBeat=100;
+        queue=[{m:60,clef:'treble',spell:spelling(60),at:4,result:null}];play(62,100);`);
+    assert.equal(app.run('correct'), 0);
+    assert.equal(app.run('wrong'), 1);
+    assert.equal(app.run('queue[0].result'), 'wrong');
+});
+
+test('notes near both edges of the drawn green area remain visible and score in either hand', () => {
+    for (const width of [300,400,1028]) {
+        for (const [tempo,density] of [[30,1],[75,1],[180,2]]) {
+            for (const source of ['test','mic']) {
+                for (const clef of ['treble','bass']) {
+                    for (const direction of [-1,1]) {
+                        const app = loadGame();
+                        app.element('paper').clientWidth = width;
+                        app.element('leftPaper').clientWidth = width;
+                        app.element('density').value = String(density);
+                        const pitch = clef === 'treble' ? 60 : 48;
+                        app.run(`setPracticeHand('both');setPracticeTempo(${tempo});game=true;mic=${source === 'mic'};
+                            lastTime=100;nextBeat=100;queue=[{m:${pitch},clef:'${clef}',spell:spelling(${pitch}),at:4,result:null}];
+                            beat=4+${direction}*windowBeats()*0.99+inputDelayBeats();draw();`);
+                        const svg = app.element(clef === 'treble' ? 'staff' : 'leftStaff').innerHTML;
+                        const zone = svg.match(/data-hit-zone="true" x="([\d.]+)" y="5" width="([\d.]+)"/);
+                        const clip = svg.match(/<clipPath[^>]+><rect x="([\d.]+)"/);
+                        const note = svg.match(/<ellipse cx="([\d.]+)"/);
+                        assert.ok(zone && clip && note, 'An eligible note must be drawn');
+                        const x = Number(note[1]), start = Number(zone[1]), end = start + Number(zone[2]);
+                        assert.ok(x >= start && x <= end, 'The note must be inside the green area');
+                        assert.ok(x - 8 >= Number(clip[1]), 'The eligible notehead must not be clipped');
+                        assert.ok(start > 55 && end < width, 'The hit area must leave room for the clef and stay on the staff');
+                        app.run(`play(${pitch},100,'${source}');`);
+                        assert.equal(app.run('correct'), 1);
+                        assert.equal(app.run('wrong+missed'), 0);
+                    }
+                }
+            }
+        }
+    }
+});

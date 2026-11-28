@@ -115,6 +115,16 @@ function snapshot(doc) {
                 if (doc.getElementById('bpm').value !== String(speed) || doc.getElementById('gameBpmOut').textContent !== `${speed} BPM`) {
                     throw new Error('Live speed control did not sync with Settings');
                 }
+                frame.contentWindow.draw();
+                for (const id of practiceHand === 'both' ? ['staff','leftStaff'] : ['staff']) {
+                    const svg = doc.getElementById(id);
+                    const zone = svg.querySelector('[data-hit-zone]');
+                    const hit = svg.querySelector('line[stroke-dasharray]');
+                    const start = zone.x.baseVal.value, end = start + zone.width.baseVal.value;
+                    if (start < 0 || end > svg.viewBox.baseVal.width || hit.x1.baseVal.value < start || hit.x1.baseVal.value > end) {
+                        throw new Error('Green hit area is outside the staff or does not include the timing line');
+                    }
+                }
                 const showNames = pass !== 1;
                 if (doc.getElementById('hintToggle').checked !== showNames) doc.getElementById('gameNoteNames').click();
                 for (const [feedback,status] of messages) {
