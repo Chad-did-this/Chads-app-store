@@ -37,6 +37,8 @@ jobs:
           node-version: '22'
       - name: Check piano game behavior
         run: node --test "App Store/Android/piano-game/tools/game.test.cjs"
+      - name: Check stable practice layout
+        run: python3 "App Store/Android/piano-game/tools/check_layout.py"
       - name: Build Piano Game
         run: gradle -p "App Store/Android/piano-game" :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
       - name: Check packaged game assets
@@ -58,6 +60,6 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release already exists."
           else
-            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Improved quiet-note recognition with High microphone sensitivity by default, live Low/Normal/High/Very high controls, quieter note attacks and a clearer input meter. Includes piano-key notation, hand flashcards and offline practice."
+            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Practice layout stays steady when feedback and microphone messages change. Fixed message slots, stable controls and code cleanup. Existing microphone sensitivity settings are preserved."
           fi
 

@@ -35,14 +35,22 @@ function makeNote(at){
  return {m,clef,spell:spelling(m,Math.random()<.5),at,result:null};
 }
 function fill(){const limit=beat+step()*(lookahead()+2);while(nextBeat<=limit){queue.push(makeNote(nextBeat));nextBeat+=step();}}
-function status(s){$('status').textContent=s;if(!$('home').hidden)$('homeStatus').textContent=s;}
-function feedback(s,kind=''){$('feedback').textContent=s;$('feedback').className='feedback '+kind;}
-function stats(){for(const [id,v] of Object.entries({correct,wrong,missed,streak}))$(id).textContent=v;}
+function setTextIfChanged(id, value) {
+ const element=$(id), text=String(value);
+ if(element.textContent!==text)element.textContent=text;
+}
+function status(s){setTextIfChanged('status',s);if(!$('home').hidden)setTextIfChanged('homeStatus',s);}
+function feedback(s,kind='') {
+ setTextIfChanged('feedback',s);
+ const className='feedback '+kind;
+ if($('feedback').className!==className)$('feedback').className=className;
+}
+function stats(){for(const [id,v] of Object.entries({correct,wrong,missed,streak}))setTextIfChanged(id,v);}
 function updateHint() {
  const n=active();
  $('hintText').hidden=!hinting;
- $('hintText').textContent=hinting&&n?'Next note: '+n.spell.label:'';
- $('gameNoteNames').textContent=hinting?'Names: On':'Show names';
+ setTextIfChanged('hintText',hinting&&n?'Next note: '+n.spell.label:'');
+ setTextIfChanged('gameNoteNames',hinting?'Names: On':'Show names');
  $('gameNoteNames').setAttribute('aria-pressed',String(hinting));
 }
 function restart(clearScore=true){
