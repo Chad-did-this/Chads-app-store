@@ -1,10 +1,9 @@
 package com.pianogame.app;
+
 import android.Manifest;
 import android.app.Activity;
 import android.os.Bundle;
 import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.view.View;
 import android.webkit.*;
 import java.io.ByteArrayInputStream;
 import java.util.HashMap;
@@ -13,9 +12,12 @@ public final class MainActivity extends Activity {
     private static final String HOST="appassets.androidplatform.net";
     private static final String URL="https://"+HOST+"/game/index.html";
     private WebView web;
-    private PermissionRequest pending;
+    private NativeMic mic;
+    private boolean permissionPending;
+    private boolean wantsMic;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        mic=new NativeMic();
         web=new WebView(this);
         setContentView(web);
         web.setOnApplyWindowInsetsListener((v,insets)->{
@@ -28,7 +30,6 @@ public final class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
-        s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest req){
@@ -41,27 +42,41 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest req){return !URL.equals(req.getUrl().toString());}
         });
         web.setWebChromeClient(new WebChromeClient(){
-            @Override public void onPermissionRequest(PermissionRequest req){
-                runOnUiThread(()->{
-                    Uri o=req.getOrigin();
-                    String[] resources=req.getResources();
-                    if(!"https".equals(o.getScheme())||!HOST.equals(o.getHost())||(o.getPort()!=-1&&o.getPort()!=443)||resources.length!=1||!PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resources[0])){req.deny();return;}
-                    if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED){req.grant(resources);return;}
-                    if(pending!=null)pending.deny();
-                    pending=req;
-                    requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},42);
-                });
-            }
-            @Override public void onPermissionRequestCanceled(PermissionRequest req){runOnUiThread(()->{if(pending==req)pending=null;});}
+            @Override public void onPermissionRequest(PermissionRequest req){req.deny();}
         });
+        web.addJavascriptInterface(new AudioBridge(),"AndroidMic");
         web.loadUrl(URL);
+    }
+    private final class AudioBridge {
+        @JavascriptInterface public void start(){
+            mic.markStarting();
+            runOnUiThread(()->{
+                wantsMic=true;
+                if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED){mic.start();return;}
+                if(!permissionPending){
+                    permissionPending=true;
+                    requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},42);
+                }
+            });
+        }
+        @JavascriptInterface public String status(){return mic.status();}
+        @JavascriptInterface public String frame(){return mic.frame();}
+        @JavascriptInterface public void stop(){runOnUiThread(()->{wantsMic=false;mic.stop();});}
     }
     private WebResourceResponse blocked(){return new WebResourceResponse("text/plain","UTF-8",403,"Forbidden",new HashMap<>(),new ByteArrayInputStream(new byte[0]));}
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
-        if(code==42&&pending!=null){PermissionRequest req=pending;pending=null;if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});else req.deny();}
+        if(code!=42)return;
+        permissionPending=false;
+        if(!wantsMic)return;
+        if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)mic.start();
+        else mic.fail("Permission denied. Allow microphone access in Android settings.");
     }
-    @Override protected void onPause(){if(web!=null){web.evaluateJavascript("if(typeof closeMic==='function')closeMic();",null);web.onPause();}super.onPause();}
+    @Override protected void onStop(){
+        if(!permissionPending){wantsMic=false;mic.stop();if(web!=null)web.evaluateJavascript("if(typeof nativeAudio!=='undefined'&&nativeAudio)audioInterrupted('Recording stopped. Tap Play to restart.');",null);}
+        super.onStop();
+    }
+    @Override protected void onPause(){if(web!=null)web.onPause();super.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
-    @Override protected void onDestroy(){if(pending!=null){pending.deny();pending=null;}if(web!=null){web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){wantsMic=false;mic.destroy();if(web!=null){web.removeJavascriptInterface("AndroidMic");web.destroy();web=null;}super.onDestroy();}
 }
