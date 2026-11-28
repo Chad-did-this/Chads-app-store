@@ -9,7 +9,7 @@ on:
       - 'distribution/release_feed.py'
   workflow_dispatch:
   workflow_run:
-    workflows: ['Android APK', 'iPhone IPA', 'Android Command Center PRO APK', 'TXT and HTML Converter APK']
+    workflows: ['Android APK', 'iPhone IPA', 'Android Command Center PRO APK', 'TXT and HTML Converter APK', 'Piano Game APK']
     types: [completed]
     branches: [main]
   schedule:

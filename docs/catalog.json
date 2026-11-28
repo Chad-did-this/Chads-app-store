@@ -38,5 +38,15 @@
     "releasePrefix": "text-html-converter-v",
     "asset": "text-html-converter.apk",
     "packageId": "com.chaddidthis.texthtml"
+  },
+  {
+    "id": "piano-game",
+    "platform": "android",
+    "name": "Piano Game",
+    "description": "Endless scrolling sheet-music practice with microphone recognition, adjustable tempo, right and left hand modes, timing and scoring. Works offline.",
+    "category": "Music",
+    "releasePrefix": "piano-game-v",
+    "asset": "piano-game.apk",
+    "packageId": "com.pianogame.app"
   }
 ]

@@ -1,0 +1,55 @@
+name: Piano Game APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'App Store/Android/piano-game/**'
+      - '.github/workflows/piano-game.yml'
+      - 'distribution/sign_android_apk.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: piano-game-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Build Piano Game
+        run: gradle -p "App Store/Android/piano-game" :app:assembleRelease
+      - name: Sign with permanent developer key
+        env:
+          ANDROID_SIGNING_JSON: ${{ secrets.ANDROID_SIGNING_JSON }}
+        run: python3 distribution/sign_android_apk.py "App Store/Android/piano-game/app/build/outputs/apk/release/app-release-unsigned.apk" dist/piano-game.apk
+      - name: Verify and checksum
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/piano-game.apk
+          (cd dist && sha256sum piano-game.apk > piano-game.apk.sha256)
+      - name: Publish in store
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="1.0.$((GITHUB_RUN_NUMBER+6))"
+          tag="piano-game-v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists."
+          else
+            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Endless piano sight-reading practice. Offline microphone input, timing, speed controls and hand selection."
+          fi

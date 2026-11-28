@@ -1,0 +1,17 @@
+plugins { id 'com.android.application' }
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()+6
+android {
+    namespace 'com.pianogame.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.pianogame.app'
+        minSdk 26
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
