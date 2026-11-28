@@ -19,7 +19,7 @@ function loadGame(bridge) {
         return elements.get(id);
     }
     for (const [id, value] of Object.entries({
-        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3'
+        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3', micSensitivity: 'high', micSensitivityQuick: 'high'
     })) element(id).value = value;
     element('hintToggle').checked = true;
     function node() {
@@ -466,4 +466,164 @@ test('microphone middle C frequency identifies the same C3 used on the staff and
     assert.equal(detected, 60);
     assert.equal(app.run(`nameOf(${detected})`), 'C3');
     assert.equal(app.run("poolFor('treble','beginner','natural')[0]"), detected);
+});
+
+function quietPianoPacket(sequence, amplitude = 0.001, midi = 60, rate = 48000) {
+    const bytes = Buffer.alloc(8192);
+    const frequency = 440 * 2 ** ((midi - 69) / 12);
+    for (let i = 0; i < 4096; i++) {
+        const sample = amplitude * Math.sin(2 * Math.PI * frequency * i / rate);
+        bytes.writeInt16LE(Math.round(sample * 32767), 2 * i);
+    }
+    return `${sequence}:${rate}:${bytes.toString('base64')}`;
+}
+
+function noiseGenerator(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        return state / 2147483648 - 1;
+    };
+}
+
+test('high sensitivity recognizes quiet piano tones rejected by the previous loudness cutoff', () => {
+    const app = loadGame();
+    for (const rate of [16000, 22050, 32000, 44100, 48000]) {
+        for (const midi of [48, 60, 67, 72]) {
+            const frequency = 440 * 2 ** ((midi - 69) / 12);
+            const noise = noiseGenerator(midi + rate);
+            app.context.input = Float32Array.from({length: 4096}, (_, i) => {
+                const phase = 2 * Math.PI * frequency * i / rate;
+                return 0.02 + 0.00065 * Math.sin(phase) + 0.0004 * Math.sin(2 * phase)
+                    + 0.0002 * Math.sin(3 * phase) + 0.0001 * noise();
+            });
+            const result = app.run(`detectPitch(input,${rate},microphoneThreshold('high'))`);
+            assert.ok(result.rms < 0.004, 'Signal is quieter than the old cutoff');
+            assert.ok(result.frequency, `Quiet MIDI ${midi} at ${rate} Hz is recognized`);
+            assert.ok(Math.abs(1200 * Math.log2(result.frequency / frequency)) < 12);
+        }
+    }
+});
+
+test('very high sensitivity supports weaker notes while retaining a silence floor', () => {
+    const app = loadGame();
+    app.context.input = Float32Array.from({length: 4096}, (_, i) =>
+        0.00015 * Math.sin(2 * Math.PI * 261.625565 * i / 48000));
+    assert.equal(app.run("detectPitch(input,48000,microphoneThreshold('high')).frequency"), null);
+    const result = app.run("detectPitch(input,48000,microphoneThreshold('max'))");
+    assert.ok(Math.abs(result.frequency - 261.625565) < 1);
+    app.context.input = new Float32Array(4096);
+    assert.equal(app.run("detectPitch(input,48000,microphoneThreshold('max')).frequency"), null);
+    app.context.input.fill(0.2);
+    assert.equal(app.run("detectPitch(input,48000,microphoneThreshold('max')).frequency"), null);
+});
+
+test('sensitivity does not treat random background hiss as a piano note', () => {
+    const app = loadGame();
+    for (const rate of [16000, 44100, 48000]) {
+        for (const seed of [1, 17, 137, 997]) {
+            const noise = noiseGenerator(seed);
+            app.context.input = Float32Array.from({length: 4096}, () => noise() * 0.001);
+            assert.equal(app.run(`detectPitch(input,${rate},microphoneThreshold('max')).frequency`), null);
+        }
+    }
+});
+
+test('quiet signed PCM from the native bridge registers a correct piano note', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.element('mode').value = 'wait';
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;lastTime=100;");
+    bridge.packet = quietPianoPacket(1);
+    app.run('analyze(200)');
+    bridge.packet = quietPianoPacket(2);
+    app.run('analyze(240)');
+    assert.equal(app.run('correct'), 1);
+    assert.equal(app.run('wrong + missed'), 0);
+    assert.equal(app.element('status').textContent, 'Heard C3');
+    assert.ok(Number.parseFloat(app.element('level').style.width) > 10);
+    app.run('closeMic()');
+});
+
+test('a quiet repeated note can register a fresh attack without reaching the former loud attack floor', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.element('mode').value = 'wait';
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;lastTime=100;");
+    bridge.packet = quietPianoPacket(1);
+    app.run('analyze(200)');
+    bridge.packet = quietPianoPacket(2);
+    app.run('analyze(240)');
+    assert.equal(app.run('correct'), 1);
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;");
+    bridge.packet = quietPianoPacket(3, 0.00035);
+    app.run('analyze(300)');
+    assert.equal(app.run('correct'), 1);
+    bridge.packet = quietPianoPacket(4, 0.001);
+    app.run('analyze(420)');
+    assert.equal(app.run('correct'), 2);
+    app.run('closeMic()');
+});
+
+test('live sensitivity changes stay in sync and preserve the recording session and score', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    const stops = bridge.stops;
+    app.run('correct=7;');
+    app.element('micSensitivityQuick').value = 'max';
+    app.element('micSensitivityQuick').onchange();
+    assert.equal(app.element('micSensitivity').value, 'max');
+    assert.equal(app.run('minimumMicRms()'), 0.00006);
+    assert.equal(app.run('correct'), 7);
+    assert.equal(app.run('mic'), true);
+    assert.equal(bridge.stops, stops);
+    app.element('micSensitivity').value = 'normal';
+    app.element('micSensitivity').onchange();
+    assert.equal(app.element('micSensitivityQuick').value, 'normal');
+    app.run('closeMic()');
+});
+
+test('changing sensitivity allows the same weak native audio to be recognized', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.element('mode').value = 'wait';
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;lastTime=100;");
+    app.run("setMicrophoneSensitivity('low')");
+    bridge.packet = quietPianoPacket(1);
+    app.run('analyze(200)');
+    bridge.packet = quietPianoPacket(2);
+    app.run('analyze(240)');
+    assert.equal(app.run('correct'), 0);
+    app.run("setMicrophoneSensitivity('high')");
+    bridge.packet = quietPianoPacket(3);
+    app.run('analyze(280)');
+    bridge.packet = quietPianoPacket(4);
+    app.run('analyze(320)');
+    assert.equal(app.run('correct'), 1);
+    app.run('closeMic()');
+});
+
+test('raising sensitivity while holding a note does not create another key press', async () => {
+    const bridge = fakeBridge();
+    const app = loadGame(bridge);
+    await app.run('startMic()');
+    app.element('mode').value = 'wait';
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;lastTime=100;");
+    bridge.packet = quietPianoPacket(1);
+    app.run('analyze(200)');
+    bridge.packet = quietPianoPacket(2);
+    app.run('analyze(240)');
+    assert.equal(app.run('correct'), 1);
+    app.run("queue=[{m:60,clef:'treble',spell:spelling(60),at:1,result:null}];beat=1;setMicrophoneSensitivity('max');");
+    bridge.packet = quietPianoPacket(3);
+    app.run('analyze(400)');
+    bridge.packet = quietPianoPacket(4);
+    app.run('analyze(440)');
+    assert.equal(app.run('correct'), 1);
+    assert.equal(app.run('wrong'), 0);
+    app.run('closeMic()');
 });

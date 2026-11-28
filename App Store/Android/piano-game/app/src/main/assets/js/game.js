@@ -25,6 +25,7 @@ let lastNote=null, hinting=false;
 const bpm=()=>Number($('bpm').value), step=()=>1/Number($('density').value), waitMode=()=>$('mode').value==='wait';
 const windowBeats=()=>Math.min(step()*.44,bpm()/60*.35);
 const inputDelayBeats=()=>mic&&!waitMode()?bpm()/60000*75:0;
+const minimumMicRms=()=>microphoneThreshold($('micSensitivity').value||'high');
 const lookahead=()=>Math.max(3.8,Math.min(7,($('paper').clientWidth-125)/55));
 const active=()=>queue.find(n=>n.result===null);
 function makeNote(at){
@@ -119,12 +120,20 @@ function analyze(time) {
  }
  if(!frame)return;
  const {samples,sampleRate:rate}=frame;
- const r=detectPitch(samples,rate);if(!r)return;const rms=r.rms;$('level').style.width=Math.min(100,rms*600)+'%';
- if(rms<.004||!r.frequency){if(++quietFrames>=2){candidate=null;candidateCount=0;sounding=null;pendingAttack=0;}priorRms=rms;return;}
+ const minimumRms=minimumMicRms();
+ const r=detectPitch(samples,rate,minimumRms);if(!r)return;
+ const rms=r.rms;$('level').style.width=microphoneLevel(rms,minimumRms)+'%';
+ if(!r.frequency){
+  if(++quietFrames===2){
+   candidate=null;candidateCount=0;sounding=null;pendingAttack=0;
+   status(rms<minimumRms?'Listening · quiet input':'Listening · waiting for a clear piano note');
+  }
+  priorRms=rms;return;
+ }
  quietFrames=0;const m=Math.round(69+12*Math.log2(r.frequency/440));if(m<21||m>108){priorRms=rms;return;}
- if(rms>Math.max(.012,priorRms*1.65)&&time-lastEvent>85)pendingAttack=time;
+ if(rms>Math.max(minimumRms*1.25,priorRms*1.65)&&time-lastEvent>85)pendingAttack=time;
  if(m===candidate)candidateCount++;else{candidate=m;candidateCount=1;}
- if(candidateCount>=2){const changed=m!==sounding,reattack=!changed&&pendingAttack>lastEvent&&time-pendingAttack<130&&time-lastEvent>85;if(changed||reattack){play(m,time,'mic');sounding=m;lastEvent=time;pendingAttack=0;}}
+ if(candidateCount>=2){const changed=m!==sounding,reattack=!changed&&pendingAttack>lastEvent&&time-pendingAttack<130&&time-lastEvent>85;if(changed||reattack){play(m,time,'mic');sounding=m;lastEvent=time;pendingAttack=0;status('Heard '+nameOf(m));}}
  priorRms=rms;
 }
 function tick(t){if(game&&!paused){advanceTo(t);analyze(t);draw();}requestAnimationFrame(tick);}
@@ -177,6 +186,13 @@ $('gameNoteNames').onclick=()=>{
  $('hintToggle').checked=!$('hintToggle').checked;
  $('hintToggle').onchange();
 };
+function setMicrophoneSensitivity(level) {
+ if(!Object.prototype.hasOwnProperty.call(MIC_SENSITIVITY,level))return;
+ $('micSensitivity').value=level;
+ $('micSensitivityQuick').value=level;
+}
+$('micSensitivity').onchange=()=>setMicrophoneSensitivity($('micSensitivity').value);
+$('micSensitivityQuick').onchange=()=>setMicrophoneSensitivity($('micSensitivityQuick').value);
 $('bpm').oninput=()=>{$('bpmOut').textContent=bpm()+' BPM';};
 $('middleCLabel').onchange=()=>{
  for(const note of queue)note.spell=spelling(note.m,note.spell.acc==='♭');
