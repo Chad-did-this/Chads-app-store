@@ -58,6 +58,6 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release already exists."
           else
-            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Separate right and left hand C D E F G flashcards with names shown immediately. Adjustable starting C and matching beginner practice ranges. Offline microphone practice, labeled keys and a note guide."
+            gh release create "$tag" dist/piano-game.apk dist/piano-game.apk.sha256 --target "$GITHUB_SHA" --title "Piano Game $version" --notes "Written notes appear directly inside the piano keys. Middle C uses the correct ledger line with C3 naming by default; C4 naming is available in Settings. Matching staff, keyboard and microphone notes, separate hand flashcards and offline practice."
           fi
 

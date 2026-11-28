@@ -19,7 +19,7 @@ function loadGame(bridge) {
         return elements.get(id);
     }
     for (const [id, value] of Object.entries({
-        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural'
+        bpm: '75', density: '1', mode: 'timed', range: 'beginner', acc: 'natural', middleCLabel: '3'
     })) element(id).value = value;
     element('hintToggle').checked = true;
     function node() {
@@ -213,8 +213,8 @@ test('Flashcards opens ordered right and left hand rows with names already visib
     assert.deepEqual(hands.map(hand => hand.dataset.hand), ['treble', 'bass']);
     assert.equal(hands[0].children[0].children[0].textContent, 'Right hand');
     assert.equal(hands[1].children[0].children[0].textContent, 'Left hand');
-    assert.deepEqual(hands[0].children[1].children.map(button => Number(button.dataset.midi)), [48, 50, 52, 53, 55]);
-    assert.deepEqual(hands[1].children[1].children.map(button => Number(button.dataset.midi)), [36, 38, 40, 41, 43]);
+    assert.deepEqual(hands[0].children[1].children.map(button => Number(button.dataset.midi)), [60, 62, 64, 65, 67]);
+    assert.deepEqual(hands[1].children[1].children.map(button => Number(button.dataset.midi)), [48, 50, 52, 53, 55]);
     for (const [index, letter] of ['C', 'D', 'E', 'F', 'G'].entries()) {
         assert.match(hands[0].children[1].children[index].innerHTML, new RegExp(`<strong>${letter}</strong>`));
         assert.match(hands[1].children[1].children[index].innerHTML, new RegExp(`<strong>${letter}</strong>`));
@@ -233,8 +233,8 @@ test('starting C choices update only that hand and match the actual practice not
     const app = loadGame();
     app.element('openFlashcards').onclick();
     const rightSelect = app.element('handCards').children[0].children[0].children[1].children[1];
-    assert.equal(rightSelect.value, '48');
-    rightSelect.value = '60';
+    assert.equal(rightSelect.value, '60');
+    rightSelect.value = '72';
     rightSelect.onchange();
     const hands = app.element('handCards').children;
     assert.match(hands[0].children[1].children[0].innerHTML, /C4/);
@@ -243,7 +243,7 @@ test('starting C choices update only that hand and match the actual practice not
     assert.equal(app.run("nameOf(poolFor('bass','beginner','natural')[0])"), 'C2');
     app.element('flashOverviewBack').onclick();
     app.element('demo').onclick();
-    assert.equal(app.run('queue.every(note=>[60,62,64,65,67].includes(note.m))'), true);
+    assert.equal(app.run('queue.every(note=>[72,74,76,77,79].includes(note.m))'), true);
 });
 
 test('staff reference names all five lines and four spaces in both clefs correctly', () => {
@@ -260,7 +260,7 @@ test('staff reference names all five lines and four spaces in both clefs correct
     }
     assert.match(app.run("studyNoteInfo({m:60,clef:'treble',spell:spelling(60)}).location"), /ledger line below/);
     assert.match(app.run("studyNoteInfo({m:60,clef:'bass',spell:spelling(60)}).location"), /ledger line above/);
-    assert.equal(app.run("studyNoteInfo({m:60,clef:'treble',spell:spelling(60)}).spoken"), 'Middle C · octave 4');
+    assert.equal(app.run("studyNoteInfo({m:60,clef:'treble',spell:spelling(60)}).spoken"), 'Middle C · octave 3');
 });
 
 test('every supported piano note highlights exactly its own key', () => {
@@ -272,8 +272,8 @@ test('every supported piano note highlights exactly its own key', () => {
     }
     const sharp = app.run("studyNoteInfo({m:61,clef:'treble',spell:spelling(61)})");
     const flat = app.run("studyNoteInfo({m:61,clef:'treble',spell:spelling(61,true)})");
-    assert.equal(sharp.label, 'C♯4');
-    assert.equal(flat.label, 'D♭4');
+    assert.equal(sharp.label, 'C♯3');
+    assert.equal(flat.label, 'D♭3');
     assert.notEqual(sharp.position, flat.position);
     assert.equal(sharp.keyHint, flat.keyHint);
     assert.match(sharp.keyHint, /black key between C and D/);
@@ -337,7 +337,7 @@ test('tapping a hand note opens its labeled detail and Back returns to both hand
     assert.equal(app.element('flashName').textContent, 'C3');
     assert.equal(app.element('noteCardTitle').textContent, 'Right hand · C3');
     assert.equal(app.element('flashAnswer').hidden, false);
-    assert.match(app.element('flashKeyboard').innerHTML, /data-midi="48" data-active="true"/);
+    assert.match(app.element('flashKeyboard').innerHTML, /data-midi="60" data-active="true"/);
     app.element('flashBack').onclick();
     assert.equal(app.element('flashcardScreen').hidden, false);
     assert.equal(app.element('handCards').children.length, 2);
@@ -392,4 +392,78 @@ test('flashcards cancel a pending microphone request and ignore its late answer'
     await request;
     assert.equal(app.element('flashcardScreen').hidden, false);
     assert.equal(app.run('game || mic || starting'), false);
+});
+
+function keyboardKey(svg, midi) {
+    const start = svg.indexOf(`<g class="study-piano-key" data-key-midi="${midi}"`);
+    assert.ok(start >= 0, `Key ${midi} is present`);
+    const next = svg.indexOf('<g class="study-piano-key"', start + 1);
+    return svg.slice(start, next < 0 ? svg.length : next);
+}
+
+test('middle C is C3 and its single ledger line crosses the notehead on the C key', () => {
+    const app = loadGame();
+    assert.equal(app.run('nameOf(60)'), 'C3');
+    assert.equal(app.run('spelling(60).label'), 'C3');
+    assert.equal(app.run("studyNoteInfo({m:60,clef:'treble',spell:spelling(60)}).position"), -2);
+    const key = keyboardKey(app.run('studyKeyboard(60)'), 60);
+    assert.match(key, /data-key-note="60" data-clef="treble"/);
+    assert.equal([...key.matchAll(/data-ledger="below"/g)].length, 1);
+    const ledgerY = Number(key.match(/<line data-ledger="below"[^>]+y1="([0-9.]+)"/)[1]);
+    const headY = Number(key.match(/<ellipse[^>]+cy="([0-9.]+)"/)[1]);
+    assert.equal(ledgerY, headY);
+    assert.match(key, />C3<\/text>/);
+});
+
+test('every white and black piano key contains the matching written note in its own clef', () => {
+    const app = loadGame();
+    for (const clef of ['treble', 'bass']) {
+        const svg = app.run(`studyKeyboard(60, nameOf(60), [60], '${clef}')`);
+        for (let midi = 60; midi <= 72; midi++) {
+            const key = keyboardKey(svg, midi);
+            assert.match(key, new RegExp(`data-key-note="${midi}" data-clef="${clef}"`));
+            assert.match(key, new RegExp(`<ellipse data-midi="${midi}"`));
+        }
+    }
+});
+
+test('changing the middle C label changes names without moving notes or changing practice pitch', () => {
+    const app = loadGame();
+    app.element('demo').onclick();
+    const pitches = app.run('JSON.stringify(queue.map(note=>note.m))');
+    const position = app.run('spelling(60).step');
+    app.element('middleCLabel').value = '4';
+    app.element('middleCLabel').onchange();
+    assert.equal(app.run('nameOf(60)'), 'C4');
+    assert.equal(app.run('spelling(60).label'), 'C4');
+    assert.equal(app.run('spelling(60).step'), position);
+    assert.equal(app.run('JSON.stringify(queue.map(note=>note.m))'), pitches);
+    assert.equal(app.run("nameOf(poolFor('treble','beginner','natural')[0])"), 'C4');
+    assert.equal(app.run('queue.every(note=>note.spell.label.endsWith("4"))'), true);
+});
+
+test('piano key tap and keyboard activation enlarge the exact note without adding microphone access', () => {
+    const app = loadGame();
+    app.element('openFlashcards').onclick();
+    const rightKeyboard = app.element('handCards').children[0].children[3];
+    const target = {closest: () => ({dataset: {keyMidi: '60'}})};
+    rightKeyboard.onclick({type: 'click', target});
+    assert.equal(app.element('noteCardTitle').textContent, 'Right hand · C3');
+    assert.equal(app.element('flashWords').textContent, 'Middle C · octave 3');
+    assert.equal(app.run('mic || starting'), false);
+    app.element('flashBack').onclick();
+    const leftKeyboard = app.element('handCards').children[1].children[3];
+    leftKeyboard.onkeydown({type: 'keydown', key: 'Enter', target: {closest: () => ({dataset: {keyMidi: '48'}})}});
+    assert.equal(app.element('noteCardTitle').textContent, 'Left hand · C2');
+    assert.match(app.element('flashKeyboard').innerHTML, /data-key-note="48" data-clef="bass"/);
+});
+
+test('microphone middle C frequency identifies the same C3 used on the staff and keyboard', () => {
+    const app = loadGame();
+    app.context.input = Float32Array.from({length: 4096}, (_, i) =>
+        0.2 * Math.sin(2 * Math.PI * 261.625565 * i / 48000));
+    const detected = app.run('Math.round(69+12*Math.log2(detectPitch(input,48000).frequency/440))');
+    assert.equal(detected, 60);
+    assert.equal(app.run(`nameOf(${detected})`), 'C3');
+    assert.equal(app.run("poolFor('treble','beginner','natural')[0]"), detected);
 });

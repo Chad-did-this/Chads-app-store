@@ -4,7 +4,7 @@ function studyNoteInfo(note) {
     const position = note.spell.step - spelling(note.clef === 'treble' ? 64 : 43).step;
     const letter = note.spell.label[0];
     const accidental = note.spell.acc === '♯' ? ' sharp' : note.spell.acc === '♭' ? ' flat' : '';
-    const octave = Math.floor(note.m / 12) - 1;
+    const octave = octaveOf(note.m);
     let location;
 
     if (position < 0 || position > 8) {
@@ -37,31 +37,33 @@ function studyNoteInfo(note) {
     return {
         position,
         label: note.spell.label,
-        spoken: note.m === 60 ? 'Middle C · octave 4' : `${letter}${accidental} · octave ${octave}`,
+        spoken: note.m === 60 ? `Middle C · octave ${octave}` : `${letter}${accidental} · octave ${octave}`,
         location,
         keyHint
     };
 }
 
-function studyNoteDrawing(note, x, bottom, gap) {
+function studyNoteDrawing(note, x, bottom, gap, ink = '#17202a') {
     const position = studyNoteInfo(note).position;
+    const scale = gap / 18;
     const y = bottom - position * gap / 2;
+    const stroke = Math.max(1, 2 * scale);
     let markup = '';
     for (let step = -2; step >= position; step -= 2) {
         const ledgerY = bottom - step * gap / 2;
-        markup += `<line x1="${x - 18}" x2="${x + 18}" y1="${ledgerY}" y2="${ledgerY}" stroke="#17202a" stroke-width="2"/>`;
+        markup += `<line data-ledger="below" x1="${x - 18 * scale}" x2="${x + 18 * scale}" y1="${ledgerY}" y2="${ledgerY}" stroke="${ink}" stroke-width="${stroke}"/>`;
     }
     for (let step = 10; step <= position; step += 2) {
         const ledgerY = bottom - step * gap / 2;
-        markup += `<line x1="${x - 18}" x2="${x + 18}" y1="${ledgerY}" y2="${ledgerY}" stroke="#17202a" stroke-width="2"/>`;
+        markup += `<line data-ledger="above" x1="${x - 18 * scale}" x2="${x + 18 * scale}" y1="${ledgerY}" y2="${ledgerY}" stroke="${ink}" stroke-width="${stroke}"/>`;
     }
     if (note.spell.acc) {
-        markup += `<text x="${x - 38}" y="${y + 10}" font-size="34" font-family="serif" fill="#17202a">${note.spell.acc}</text>`;
+        markup += `<text x="${x - 38 * scale}" y="${y + 10 * scale}" font-size="${34 * scale}" font-family="serif" fill="${ink}">${note.spell.acc}</text>`;
     }
     const up = position < 4;
-    const stemX = x + (up ? 9 : -9);
-    markup += `<ellipse data-midi="${note.m}" cx="${x}" cy="${y}" rx="11" ry="7.5" transform="rotate(-20 ${x} ${y})" fill="#17202a"/>`;
-    return markup + `<line x1="${stemX}" x2="${stemX}" y1="${y}" y2="${y + (up ? -44 : 44)}" stroke="#17202a" stroke-width="2.2"/>`;
+    const stemX = x + (up ? 9 : -9) * scale;
+    markup += `<ellipse data-midi="${note.m}" cx="${x}" cy="${y}" rx="${11 * scale}" ry="${7.5 * scale}" transform="rotate(-20 ${x} ${y})" fill="${ink}"/>`;
+    return markup + `<line x1="${stemX}" x2="${stemX}" y1="${y}" y2="${y + (up ? -44 : 44) * scale}" stroke="${ink}" stroke-width="${stroke}"/>`;
 }
 
 function studyStaffScene(notes, labels, answerVisible) {
@@ -99,25 +101,49 @@ function studyStaffRow(notes) {
     return studyStaffScene(notes, true, true);
 }
 
-function studyKeyboard(midi, label = nameOf(midi), selected = [midi]) {
+function studyKeyNotation(midi, clef, x, y, width, height, ink, flat = false) {
+    const note = {m: midi, clef, spell: spelling(midi, flat)};
+    const position = studyNoteInfo(note).position;
+    const gap = 6;
+    const bottom = 12 + Math.max(8, position) * gap / 2;
+    const lowest = bottom - Math.min(0, position) * gap / 2;
+    const drawingHeight = Math.max(bottom + 10, lowest + 10);
+    const scale = Math.min(width / 32, height / drawingHeight);
+    const offsetX = x + (width - 32 * scale) / 2;
+    const offsetY = y + (height - drawingHeight * scale) / 2;
+    let markup = `<g data-key-note="${midi}" data-clef="${clef}" transform="translate(${offsetX} ${offsetY}) scale(${scale})">`;
+    for (let line = 0; line < 5; line++) {
+        const lineY = bottom - line * gap;
+        markup += `<line x1="2" x2="30" y1="${lineY}" y2="${lineY}" stroke="${ink}" opacity=".35" stroke-width=".9"/>`;
+    }
+    return markup + studyNoteDrawing(note, 16, bottom, gap, ink) + '</g>';
+}
+
+function studyKeyboard(midi, label = nameOf(midi), selected = [midi], clef = 'treble') {
     const start = Math.floor(midi / 12) * 12;
     const whites = [0, 2, 4, 5, 7, 9, 11, 12];
     const blacks = [[1, 0], [3, 1], [6, 3], [8, 4], [10, 5]];
-    let markup = `<svg viewBox="0 0 344 150" role="img" aria-label="Piano keys with ${label} highlighted in green" xmlns="http://www.w3.org/2000/svg">`;
-
+    let markup = `<svg viewBox="0 0 344 228" role="group" aria-label="Piano keys with their written notes. ${label} highlighted in green. Tap a key to enlarge its note." xmlns="http://www.w3.org/2000/svg">`;
     for (const [index, pitch] of whites.entries()) {
         const key = start + pitch;
         const active = selected.includes(key);
         const x = index * 43;
-        markup += `<rect data-midi="${key}" data-active="${active}" x="${x + 1}" y="1" width="41" height="147" rx="4" fill="${active ? '#9aebc8' : '#fffdf5'}" stroke="#283642" stroke-width="1.5"/>`;
-        markup += `<text x="${x + 21.5}" y="130" text-anchor="middle" fill="#17202a" font-family="system-ui,sans-serif" font-size="17" font-weight="700">${nameOf(key)}</text>`;
+        markup += `<g class="study-piano-key" data-key-midi="${key}" role="button" tabindex="0" aria-label="${nameOf(key)}: enlarge this note">`;
+        markup += `<rect data-midi="${key}" data-active="${active}" x="${x + 1}" y="1" width="41" height="224" rx="4" fill="${active ? '#9aebc8' : '#fffdf5'}" stroke="#283642" stroke-width="1.5"/>`;
+        markup += studyKeyNotation(key, clef, x + 4, 113, 35, 82, '#17202a');
+        markup += `<text x="${x + 21.5}" y="213" text-anchor="middle" fill="#17202a" font-family="system-ui,sans-serif" font-size="17" font-weight="700">${nameOf(key)}</text></g>`;
     }
     for (const [pitch, leftWhite] of blacks) {
         const key = start + pitch;
         const active = selected.includes(key);
         const x = (leftWhite + 1) * 43 - 13;
-        markup += `<rect data-midi="${key}" data-active="${active}" x="${x}" y="1" width="26" height="87" rx="3" fill="${active ? '#9aebc8' : '#283642'}" stroke="#17202a"/>`;
-        markup += `<text x="${x + 13}" y="72" text-anchor="middle" fill="${active ? '#17202a' : '#fffdf5'}" font-family="system-ui,sans-serif" font-size="10" font-weight="700">${active ? label : nameOf(key)}</text>`;
+        const ink = active ? '#17202a' : '#fffdf5';
+        const flat = key === midi && label.includes('♭');
+        const keyLabel = key === midi ? label : nameOf(key);
+        markup += `<g class="study-piano-key" data-key-midi="${key}" role="button" tabindex="0" aria-label="${keyLabel}: enlarge this note">`;
+        markup += `<rect data-midi="${key}" data-active="${active}" x="${x}" y="1" width="26" height="102" rx="3" fill="${active ? '#9aebc8' : '#283642'}" stroke="#17202a"/>`;
+        markup += studyKeyNotation(key, clef, x + 2.5, 8, 21, 66, ink, flat);
+        markup += `<text x="${x + 13}" y="92" text-anchor="middle" fill="${ink}" font-family="system-ui,sans-serif" font-size="10" font-weight="700">${keyLabel}</text></g>`;
     }
     return markup + '</svg>';
 }
@@ -190,6 +216,33 @@ const NoteStudy = (() => {
         renderCard();
     }
 
+    function bindKeyboard(container, clef, from) {
+        function activate(event) {
+            if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+            const key = event.target.closest('[data-key-midi]');
+            if (!key) return;
+            const midi = Number(key.dataset.keyMidi);
+            if (!Number.isInteger(midi) || midi < 21 || midi > 108) return;
+            if (event.preventDefault) event.preventDefault();
+            const note = {m: midi, clef, spell: spelling(midi)};
+            if (from === 'noteCardScreen') {
+                current = note;
+                renderCard();
+            } else {
+                openCard(note, from);
+            }
+        }
+        container.onclick = activate;
+        container.onkeydown = activate;
+    }
+
+    function refreshLabels() {
+        if (current) current.spell = spelling(current.m, current.spell.acc === '♭');
+        if (!$('flashcardScreen').hidden) renderOverview();
+        if (!$('noteCardScreen').hidden) renderCard();
+        if (!$('noteGuideScreen').hidden) renderGuide();
+    }
+
     function renderCard() {
         if (!current) return;
         const info = studyNoteInfo(current);
@@ -201,11 +254,13 @@ const NoteStudy = (() => {
         $('flashName').textContent = info.label;
         $('flashWords').textContent = info.spoken;
         $('flashPosition').textContent = info.location;
-        $('flashKeyboard').innerHTML = studyKeyboard(current.m, info.label);
+        $('flashKeyboard').innerHTML = studyKeyboard(current.m, info.label, [current.m], current.clef);
+        bindKeyboard($('flashKeyboard'), current.clef, 'noteCardScreen');
         $('flashKeyHint').textContent = info.keyHint;
     }
 
     function renderOverview() {
+        $('flashIntro').textContent = `Each piano key shows its written note. Middle C is labeled ${nameOf(60)}. Tap a key to enlarge it.`;
         const sections = ['treble', 'bass'].map(clef => {
             const name = clef === 'treble' ? 'Right hand' : 'Left hand';
             const root = beginnerRoots[clef];
@@ -256,7 +311,8 @@ const NoteStudy = (() => {
             staff.innerHTML = studyStaffRow(notes);
             const keyboard = document.createElement('div');
             keyboard.className = 'hand-lesson-keys';
-            keyboard.innerHTML = studyKeyboard(root, nameOf(root), notes.map(note => note.m));
+            keyboard.innerHTML = studyKeyboard(root, nameOf(root), notes.map(note => note.m), clef);
+            bindKeyboard(keyboard, clef, 'flashcardScreen');
             section.replaceChildren(header, names, staff, keyboard);
             return section;
         });
@@ -265,6 +321,8 @@ const NoteStudy = (() => {
 
     function renderGuide() {
         $('guideKeyboard').innerHTML = studyKeyboard(beginnerRoots.treble);
+        bindKeyboard($('guideKeyboard'), 'treble', 'noteGuideScreen');
+        $('guideMiddleC').textContent = `Middle C is called ${nameOf(60)} here. Its note sits on a short line below the right-hand staff. You can change the C3/C4 naming in Settings.`;
         const cards = deck();
         const sections = [];
         for (const clef of ['treble', 'bass']) {
@@ -333,5 +391,5 @@ const NoteStudy = (() => {
     $('flashBack').onclick = back;
     $('guideBack').onclick = back;
 
-    return {openFlashcards, openGuide, back};
+    return {openFlashcards, openGuide, back, refreshLabels};
 })();
